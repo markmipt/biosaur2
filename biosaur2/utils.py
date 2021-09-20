@@ -29,7 +29,7 @@ def split_peaks(hills_dict, data_for_analyse_tmp, args):
     hills_dict['scan_idx_array'] = hills_dict['scan_idx_array'][idx_minl]
     hills_dict['orig_idx_array'] = hills_dict['orig_idx_array'][idx_minl]
 
-    idx_sort = np.argsort(hills_dict['hills_idx_array'])
+    idx_sort = np.argsort(hills_dict['hills_idx_array'] + (hills_dict['scan_idx_array'] / (hills_dict['scan_idx_array'].max()+1)))
     hills_dict['hills_idx_array'] = hills_dict['hills_idx_array'][idx_sort]
     hills_dict['scan_idx_array'] = hills_dict['scan_idx_array'][idx_sort]
     hills_dict['orig_idx_array'] = hills_dict['orig_idx_array'][idx_sort]
@@ -54,9 +54,6 @@ def split_peaks(hills_dict, data_for_analyse_tmp, args):
             tmp_scans = hills_dict['scan_idx_array'][idx_start:idx_end]
             tmp_orig_idx = hills_dict['orig_idx_array'][idx_start:idx_end]
             tmp_intensity = [data_for_analyse_tmp[scan_val]['intensity array'][orig_idx_val] for orig_idx_val, scan_val in zip(tmp_orig_idx, tmp_scans)]
-
-            if len(set(hills_dict['hills_idx_array'][idx_start:idx_start+hill_length])) > 1:
-                print(hills_dict['hills_idx_array'][idx_start:idx_start+hill_length], list(hills_dict['hills_idx_array']).count(hill_idx), counter_hills_idx[hill_idx], '?')
 
             smothed_intensity = meanfilt(tmp_intensity, 2)
             c_len = hill_length - min_length_hill - 1
@@ -290,7 +287,7 @@ def process_hills(hills_dict, data_for_analyse_tmp, mz_step, args):
     hills_dict['scan_idx_array'] = hills_dict['scan_idx_array'][idx_minl]
     hills_dict['orig_idx_array'] = hills_dict['orig_idx_array'][idx_minl]
 
-    idx_sort = np.argsort(hills_dict['hills_idx_array'])
+    idx_sort = np.argsort(hills_dict['hills_idx_array'] + (hills_dict['scan_idx_array'] / (hills_dict['scan_idx_array'].max()+1)))
     hills_dict['hills_idx_array'] = hills_dict['hills_idx_array'][idx_sort]
     hills_dict['scan_idx_array'] = hills_dict['scan_idx_array'][idx_sort]
     hills_dict['orig_idx_array'] = hills_dict['orig_idx_array'][idx_sort]
@@ -363,6 +360,177 @@ def process_hills(hills_dict, data_for_analyse_tmp, mz_step, args):
 
     return hills_dict
 
+def centroid_pasef_data(data_for_analyse_tmp, args, mz_step):
+
+    cnt_ms1_scans = len(data_for_analyse_tmp)
+    for spec_idx, z in enumerate(data_for_analyse_tmp):
+
+        print('PASEF scans analysis: %d/%d' % (spec_idx+1, cnt_ms1_scans))
+        print('number of m/z peaks in scan: %d' % (len(z['m/z array'])))
+
+        if 'ignore_ion_mobility' not in z:
+
+            mz_ar_new = []
+            intensity_ar_new = []
+            ion_mobility_ar_new = []
+
+            mz_ar = z['m/z array']
+            intensity_ar = z['intensity array']
+            ion_mobility_ar = z['mean inverse reduced ion mobility array']
+
+            ion_mobility_accuracy = args['paseftol']
+            ion_mobility_step = max(ion_mobility_ar) * ion_mobility_accuracy
+
+            ion_mobility_ar_fast = (ion_mobility_ar/ion_mobility_step).astype(int)
+            mz_ar_fast = (mz_ar/mz_step).astype(int)
+
+            max_mz_int = max(mz_ar_fast) * 2
+
+            # print('HERE1')
+
+            idx = np.argsort(mz_ar_fast)
+            mz_ar_fast = mz_ar_fast[idx]
+            ion_mobility_ar_fast = ion_mobility_ar_fast[idx]
+
+            mz_ar = mz_ar[idx]
+            intensity_ar = intensity_ar[idx]
+            ion_mobility_ar = ion_mobility_ar[idx]
+
+            idx_ar = list(range(len(mz_ar)))
+
+            # print('HERE2')
+
+            # for peak_idx in idx_ar:
+
+            max_peak_idx = len(mz_ar)
+            
+            peak_idx = 0
+            while peak_idx < max_peak_idx:
+
+                mz_val_int = mz_ar_fast[peak_idx]
+                ion_mob_val_int = ion_mobility_ar_fast[peak_idx]
+
+                tmp = [peak_idx, ]
+
+                peak_idx_2 = peak_idx + 1
+
+                while peak_idx_2 < max_peak_idx:
+                    mz_val_int_2 = mz_ar_fast[peak_idx_2]
+                    if mz_val_int_2 - mz_val_int > 1:
+                        break
+                    else:
+                        ion_mob_val_int_2 = ion_mobility_ar_fast[peak_idx_2]
+                        if abs(ion_mob_val_int - ion_mob_val_int_2) <= 1:
+                            tmp.append(peak_idx_2)
+                            peak_idx = peak_idx_2
+                    peak_idx_2 += 1
+
+                # if ion_mob_val_int != -1:
+
+                #     mask1 = ion_mobility_ar_fast == ion_mob_val_int-1
+                #     mask2 = ion_mobility_ar_fast == ion_mob_val_int
+                #     mask3 = ion_mobility_ar_fast == ion_mob_val_int+1
+
+                #     idx1 = mask1 + mask2 + mask3
+
+                #     mask1 = mz_ar_fast == mz_val_int-1
+                #     mask2 = mz_ar_fast == mz_val_int
+                #     mask3 = mz_ar_fast == mz_val_int+1
+
+                #     idx2 = mask1 + mask2 + mask3
+
+                #     idx3 = idx1 * idx2
+
+                #     all_intensity = intensity_ar[idx3]
+                all_intensity = [intensity_ar[p_id] for p_id in tmp]
+                i_val_new = sum(all_intensity)
+
+                if i_val_new >= args['pasefmini']:
+
+                    all_mz = [mz_ar[p_id] for p_id in tmp]
+                    all_ion_mob = [ion_mobility_ar[p_id] for p_id in tmp]
+
+                    mz_val_new = np.average(all_mz, weights=all_intensity)
+                    ion_mob_new = np.average(all_ion_mob, weights=all_intensity)
+
+                    intensity_ar_new.append(i_val_new)
+                    mz_ar_new.append(mz_val_new)
+                    ion_mobility_ar_new.append(ion_mob_new)
+
+                peak_idx += 1
+            
+            data_for_analyse_tmp[spec_idx]['m/z array'] = np.array(mz_ar_new)
+            data_for_analyse_tmp[spec_idx]['intensity array'] = np.array(intensity_ar_new)
+            data_for_analyse_tmp[spec_idx]['mean inverse reduced ion mobility array'] = np.array(ion_mobility_ar_new)
+
+        print('number of m/z peaks in scan after centroiding: %d' % (len(data_for_analyse_tmp[spec_idx]['m/z array'])))
+        print('\n')
+
+    data_for_analyse_tmp = [z for z in data_for_analyse_tmp if len(z['m/z array'] > 0)]
+    print('Number of MS1 scans after combining ion mobility peaks: ', len(data_for_analyse_tmp))
+
+            # fast_dict = defaultdict(set)
+            # for peak_idx, (mz_val_int, ion_mob_val_int) in enumerate(zip(mz_ar_fast, ion_mobility_ar_fast)):
+
+            #     fast_dict[(mz_val_int-1, ion_mob_val_int)].add(peak_idx)
+            #     fast_dict[(mz_val_int, ion_mob_val_int)].add(peak_idx)
+            #     fast_dict[(mz_val_int+1, ion_mob_val_int)].add(peak_idx)
+
+            #     fast_dict[(mz_val_int-1, ion_mob_val_int-1)].add(peak_idx)
+            #     fast_dict[(mz_val_int, ion_mob_val_int-1)].add(peak_idx)
+            #     fast_dict[(mz_val_int+1, ion_mob_val_int-1)].add(peak_idx)
+
+            #     fast_dict[(mz_val_int-1, ion_mob_val_int+1)].add(peak_idx)
+            #     fast_dict[(mz_val_int, ion_mob_val_int+1)].add(peak_idx)
+            #     fast_dict[(mz_val_int+1, ion_mob_val_int+1)].add(peak_idx)
+
+
+    #         print('HERE2')
+
+    #         hill_length = []
+    #         peak_idx_array = []
+    #         for peak_idx, (mz_val_int, ion_mob_val_int) in enumerate(zip(mz_ar_fast, ion_mobility_ar_fast)):
+    #             hill_length.append(len(fast_dict[(mz_val_int, ion_mob_val_int)]))
+    #             peak_idx_array.append(peak_idx)
+    #         peak_idx_array = np.array(peak_idx_array)
+        
+
+    #         print('HERE3')
+
+    #         added_idx = set()
+    #         idx_sort = np.argsort(hill_length)[::-1]
+    #         for peak_idx in peak_idx_array[idx_sort]:
+    #             if peak_idx not in added_idx:
+    #                 mz_val_int = mz_ar_fast[peak_idx]
+    #                 ion_mob_val_int = ion_mobility_ar_fast[peak_idx]
+    #                 all_idx = set([p_id for p_id in fast_dict[(mz_val_int, ion_mob_val_int)] if p_id not in added_idx])
+    #                 if len(all_idx):
+    #                     added_idx.update(all_idx)
+            
+    #                     all_intensity = [intensity_ar[p_id] for p_id in all_idx]
+    #                     i_val_new = sum(all_intensity)
+
+    #                     if i_val_new >= args['pasefmini']:
+
+    #                         all_mz = [mz_ar[p_id] for p_id in all_idx]
+    #                         all_ion_mob = [ion_mobility_ar[p_id] for p_id in all_idx]
+
+    #                         mz_val_new = np.average(all_mz, weights=all_intensity)
+    #                         ion_mob_new = np.average(all_ion_mob, weights=all_intensity)
+
+    #                         intensity_ar_new.append(i_val_new)
+    #                         mz_ar_new.append(mz_val_new)
+    #                         ion_mobility_ar_new.append(ion_mob_new)
+            
+    #         data_for_analyse_tmp[spec_idx]['m/z array'] = np.array(mz_ar_new)
+    #         data_for_analyse_tmp[spec_idx]['intensity array'] = np.array(intensity_ar_new)
+    #         data_for_analyse_tmp[spec_idx]['mean inverse reduced ion mobility array'] = np.array(ion_mobility_ar_new)
+
+    # data_for_analyse_tmp = [z for z in data_for_analyse_tmp if len(z['m/z array'] > 0)]
+    # print('Number of MS1 scans after combining ion mobility peaks: ', len(data_for_analyse_tmp))
+        
+    return data_for_analyse_tmp
+
 def detect_hills(data_for_analyse_tmp, args, mz_step):
 
     hills_dict = {}
@@ -392,27 +560,48 @@ def detect_hills(data_for_analyse_tmp, args, mz_step):
         hills_dict['hills_idx_array'].extend(list(range(last_idx+1, last_idx+1+len_mz, 1)))
         hills_dict['orig_idx_array'].extend(range(len_mz))
         hills_dict['scan_idx_array'].extend([spec_idx] * len_mz)
+
+        idx_for_sort = np.argsort(z['intensity array'])[::-1]
+
+        mz_sorted = z['m/z array'][idx_for_sort]
+        basic_id_sorted = np.array(range(len_mz))[idx_for_sort]
+
         hills_dict['mzs_array'].extend(z['m/z array'])
         hills_dict['intensity_array'].extend(z['intensity array'])
         
         fast_dict = defaultdict(set)
-        fast_array = (z['m/z array']/mz_step).astype(int)
-        for idx, fm in enumerate(fast_array):
+        fast_array = (mz_sorted/mz_step).astype(int)
+        for idx, fm in zip(basic_id_sorted, fast_array):
             fast_dict[fm-1].add(idx)
             fast_dict[fm+1].add(idx)
             fast_dict[fm].add(idx)
 
-        for idx, fm in enumerate(fast_array):
+        banned_prev_idx_set = set()
+
+        for idx, fm in zip(basic_id_sorted, fast_array):
             if fm in prev_fast_dict:
 
                 best_mass_diff = 1e6
+                best_idx_prev = False
                 mz_cur = z['m/z array'][idx]
                 for idx_prev in prev_fast_dict[fm]:
-                    cur_mass_diff = abs(mz_cur - data_for_analyse_tmp[spec_idx-1]['m/z array'][idx_prev]) / mz_cur * 1e6
-                    if cur_mass_diff <= hill_mass_accuracy and cur_mass_diff <= best_mass_diff:
-                        best_mass_diff = cur_mass_diff
-                        # hills_dict['hills_idx_array'][last_idx+1+idx] = prev_idx + 1 + idx_prev
-                        hills_dict['hills_idx_array'][last_idx+1+idx] = hills_dict['hills_idx_array'][prev_idx+1+idx_prev]
+                    if idx_prev not in banned_prev_idx_set:
+                        cur_mass_diff = abs(mz_cur - data_for_analyse_tmp[spec_idx-1]['m/z array'][idx_prev]) / mz_cur * 1e6
+                        if cur_mass_diff <= hill_mass_accuracy and cur_mass_diff <= best_mass_diff:
+                            best_mass_diff = cur_mass_diff
+                            best_idx_prev = idx_prev
+                            # hills_dict['hills_idx_array'][last_idx+1+idx] = prev_idx + 1 + idx_prev
+                            hills_dict['hills_idx_array'][last_idx+1+idx] = hills_dict['hills_idx_array'][prev_idx+1+idx_prev]
+                if best_idx_prev is not False:
+                    banned_prev_idx_set.add(best_idx_prev)
+
+
+                    # cur_mass_diff = (mz_cur - data_for_analyse_tmp[spec_idx-1]['m/z array'][idx_prev]) / mz_cur * 1e6
+                    # # cur_mass_diff_norm = abs(cur_mass_diff) * (1 if cur_mass_diff < 0 else 2)
+                    # if -hill_mass_accuracy - 2.5 <= cur_mass_diff <= hill_mass_accuracy and abs(cur_mass_diff) <= best_mass_diff:
+                    #     best_mass_diff = abs(cur_mass_diff)
+                    #     # hills_dict['hills_idx_array'][last_idx+1+idx] = prev_idx + 1 + idx_prev
+                    #     hills_dict['hills_idx_array'][last_idx+1+idx] = hills_dict['hills_idx_array'][prev_idx+1+idx_prev]
 
 
 
@@ -427,60 +616,23 @@ def detect_hills(data_for_analyse_tmp, args, mz_step):
     return hills_dict#hills_idx_array, orig_idx_array, scan_idx_array, mzs_array, intensity_array
 
 
-def data_to_features(input_file, max_diff, min_length_hill, proccess_number, start_index, end_index):
-
-    mz_step = max_diff * 1e-6 * 2500
-
-    mz_array = copy(mz_array)
-
-    k = 0
-    # print(len(input_file))
-
-    for i in input_file:
-        idx = (i['m/z array'] >= start_index) & (i['m/z array'] < end_index)
-        # (dists >= r) & (dists <= r+dr)
-        new_mz_array = i['m/z array'][idx]
-        new_intensity_array = i['intensity array'][idx]
-        if 'mean inverse reduced ion mobility array' in i:
-            new_ion_mobility_array = i['mean inverse reduced ion mobility array'][idx]
-        else:
-            new_ion_mobility_array = None
-        if k == 0:
-            peak1 = classes.peak(
-                new_mz_array,
-                new_intensity_array,
-                i['index'],
-                i['index'],
-                new_ion_mobility_array,
-                )
-
-        if k > 0:
-            next_peak_i = classes.next_peak(
-                new_mz_array,
-                new_intensity_array,
-                i['index'],
-                new_ion_mobility_array,
-                )
-            peak1.push_me_to_the_peak(next_peak_i, max_diff, min_length_hill, mz_step)
-        k += 1
-    peak1.push_left(min_length=min_length_hill)
-
-    logging.info(
-        u'Data converted to features with process /' +
-        str(proccess_number + 1) + '/ --->')
-    return peak1
-
-
 def process_mzml(args):
 
     input_mzml_path = args['file']
     min_intensity = args['mini']
+    min_mz = args['minmz']
+    max_mz = args['maxmz']
 
+    skipped = 0
     data_for_analyse = []
+
+    cnt = 0
+
     for z in mzml.read(input_mzml_path):
         if z['ms level'] == 1:
 
             if 'mean inverse reduced ion mobility array' not in z:
+                z['ignore_ion_mobility'] = True
                 z['mean inverse reduced ion mobility array'] = np.zeros(len(z['m/z array']))
 
             idx = z['intensity array'] >= min_intensity
@@ -488,13 +640,32 @@ def process_mzml(args):
             z['m/z array'] = z['m/z array'][idx]
             z['mean inverse reduced ion mobility array'] = z['mean inverse reduced ion mobility array'][idx]
 
+            idx = z['m/z array'] >= min_mz
+            z['m/z array'] = z['m/z array'][idx]
+            z['intensity array'] = z['intensity array'][idx]
+            z['mean inverse reduced ion mobility array'] = z['mean inverse reduced ion mobility array'][idx]
+
+            idx = z['m/z array'] <= max_mz
+            z['m/z array'] = z['m/z array'][idx]
+            z['intensity array'] = z['intensity array'][idx]
+            z['mean inverse reduced ion mobility array'] = z['mean inverse reduced ion mobility array'][idx]
+
             idx = np.argsort(z['m/z array'])
             z['m/z array'] = z['m/z array'][idx]
             z['intensity array'] = z['intensity array'][idx]
             z['mean inverse reduced ion mobility array'] = z['mean inverse reduced ion mobility array'][idx]
 
-            data_for_analyse.append(z)
+            cnt += 1
+
+            # if 175 <= cnt <= 225:
+
+            if len(z['m/z array']):
+                data_for_analyse.append(z)
+            else:
+                skipped += 1
+
 
     print('Number of MS1 scans: ' + str(len(data_for_analyse)))
+    print('Number of skipped MS1 scans: ' + str(skipped))
 
     return data_for_analyse

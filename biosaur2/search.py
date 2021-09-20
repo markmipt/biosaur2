@@ -16,8 +16,12 @@ def run():
 
     parser.add_argument('file', help='input mzML file')
     parser.add_argument('-mini', help='min intensity', default=1, type=float)
+    parser.add_argument('-minmz', help='min mz', default=350, type=float)
+    parser.add_argument('-maxmz', help='max mz', default=900, type=float)
+    parser.add_argument('-pasefmini', help='min intensity after combining hills in PASEF analysis', default=100, type=float)
     parser.add_argument('-htol', help='mass accuracy for hills in ppm', default=10, type=float)
     parser.add_argument('-itol', help='mass accuracy for isotopes in ppm', default=10, type=float)
+    parser.add_argument('-paseftol', help='ion mobility accuracy for hills', default=0.05, type=float)
     parser.add_argument('-nm', help='negative mode. 1-true, 0-false', default=0, type=int)
     parser.add_argument('-o', help='path to output features file', default='')
     parser.add_argument('-hvf', help='hill valley factor', default=1.3, type=float)
