@@ -54,13 +54,15 @@ def split_peaks(hills_dict, data_for_analyse_tmp, args):
             tmp_scans = hills_dict['scan_idx_array'][idx_start:idx_end]
             tmp_orig_idx = hills_dict['orig_idx_array'][idx_start:idx_end]
             tmp_intensity = [data_for_analyse_tmp[scan_val]['intensity array'][orig_idx_val] for orig_idx_val, scan_val in zip(tmp_orig_idx, tmp_scans)]
+            tmp_mz_array = [data_for_analyse_tmp[scan_val]['m/z array'][orig_idx_val] for orig_idx_val, scan_val in zip(tmp_orig_idx, tmp_scans)]
 
             smothed_intensity = meanfilt(tmp_intensity, 2)
-            c_len = hill_length - min_length_hill - 1
+            c_len = hill_length - min_length_hill
             idx = int(min_length_hill) - 1
             min_idx_list = []
             min_val = 0
             l_idx = 0
+            recheck_r_r = []
 
             while idx <= c_len:
 
@@ -73,24 +75,22 @@ def split_peaks(hills_dict, data_for_analyse_tmp, args):
                     if r_r >= hillValleyFactor:
                         mult_val = l_r * r_r
                         include_factor = (1 if l_r > r_r else 0)
-                        if not len(min_idx_list) or idx + include_factor >= min_idx_list[-1] + min_length_hill:
-                            min_idx_list.append(idx + include_factor)
-                            min_val = mult_val
-                        elif mult_val > min_val:
-                            min_idx_list[-1] = idx + include_factor
-                            min_val = mult_val
-                        # if idx + include_factor >= (0 if not len(min_idx_list) else min_idx_list[-1]) + min_length_hill:
-                        # if idx + include_factor >= (0 if not len(min_idx_list) else min_idx_list[-1]) + min_length_hill:
-                            # if not len(min_idx_list):
-                            #     min_idx_list.append(idx + include_factor)
-                            # elif mult_val > min_val:
-                            #     min_idx_list[-1] = idx + include_factor
-                            # min_val = mult_val
+                        if (min_length_hill <= idx + include_factor <= c_len):
+                            if not len(min_idx_list) or idx + include_factor >= min_idx_list[-1] + min_length_hill:
+                                min_idx_list.append(idx + include_factor)
+                                recheck_r_r.append(idx)
+                                min_val = mult_val
+                            elif mult_val > min_val:
+                                min_idx_list[-1] = idx + include_factor
+                                recheck_r_r[-1] = idx
+                                min_val = mult_val
                 idx += 1
             if len(min_idx_list):
-                for min_idx in min_idx_list:
-                    hills_dict['hills_idx_array'][idx_start+min_idx:idx_start+hill_length] = cur_new_idx
-                    cur_new_idx += 1
+                for min_idx, end_idx, recheck_idx in zip(min_idx_list, min_idx_list[1:] + [idx_start+hill_length, ], recheck_r_r):
+                    r_r = max(smothed_intensity[recheck_idx+1:end_idx]) / float(smothed_intensity[recheck_idx])
+                    if r_r >= hillValleyFactor:
+                        hills_dict['hills_idx_array'][idx_start+min_idx:idx_start+hill_length] = cur_new_idx
+                        cur_new_idx += 1
 
         idx_start = idx_end
 
@@ -257,6 +257,7 @@ def write_output(peptide_features, args, write_header=True):
         'rtStart',
         'rtEnd',
         'FAIMS',
+        'im',
     ]
 
     if write_header:
@@ -271,7 +272,7 @@ def write_output(peptide_features, args, write_header=True):
 
     out_file.close()
 
-def process_hills(hills_dict, data_for_analyse_tmp, mz_step, args):
+def process_hills(hills_dict, data_for_analyse_tmp, mz_step, paseftol, args):
 
     counter_hills_idx = Counter(hills_dict['hills_idx_array'])
     min_length_hill = args['minlh']
@@ -296,6 +297,10 @@ def process_hills(hills_dict, data_for_analyse_tmp, mz_step, args):
     hills_dict['hills_idx_array_unique'] = sorted(list(set(hills_dict['hills_idx_array'])))
     hills_dict['hills_mz_median'] = []
     hills_dict['hills_mz_median_fast_dict'] = defaultdict(set)
+    if paseftol is not False:
+        hills_dict['hills_im_median'] = []
+        hills_dict['hills_im_median_fast_dict'] = defaultdict(set)
+        
     hills_dict['hills_intensity_array'] = []
     hills_dict['hills_scan_sets'] = []
     hills_dict['hills_scan_lists'] = []
@@ -326,12 +331,19 @@ def process_hills(hills_dict, data_for_analyse_tmp, mz_step, args):
             # mz_median = np.median([data_for_analyse_tmp[scan_val]['m/z array'][orig_idx_val] for orig_idx_val, scan_val in zip(tmp_orig_idx, tmp_scans)])
             tmp_mz_array = [data_for_analyse_tmp[scan_val]['m/z array'][orig_idx_val] for orig_idx_val, scan_val in zip(tmp_orig_idx, tmp_scans)]
             mz_median = np.average(tmp_mz_array, weights=tmp_intensity)
+            # mz_median = np.median(tmp_mz_array)
+            if paseftol is not False:
+                tmp_im_array = [data_for_analyse_tmp[scan_val]['mean inverse reduced ion mobility array'][orig_idx_val] for orig_idx_val, scan_val in zip(tmp_orig_idx, tmp_scans)]
+                im_median = np.average(tmp_im_array, weights=tmp_intensity)
             tmp_scans_list = tmp_scans
             tmp_scans_set = set(tmp_scans)
 
         else:
             tmp_mz_array = [hills_dict['mzs_array'][hill_idx], ]
             mz_median = hills_dict['mzs_array'][hill_idx]
+            if paseftol is not False:
+                tmp_im_array = [hills_dict['im_array'][hill_idx], ]
+                im_median = hills_dict['im_array'][hill_idx]
             tmp_intensity = hills_dict['intensity_array'][hill_idx]
             # tmp_scans = set([hills_dict['scan_idx_array'][hill_idx], ])
             tmp_scans_set = hills_dict['scan_idx_array'][hill_idx]
@@ -345,6 +357,15 @@ def process_hills(hills_dict, data_for_analyse_tmp, mz_step, args):
         hills_dict['hills_mz_median_fast_dict'][mz_median_int-1].add(idx_1)
         hills_dict['hills_mz_median_fast_dict'][mz_median_int].add(idx_1)
         hills_dict['hills_mz_median_fast_dict'][mz_median_int+1].add(idx_1)
+
+        if paseftol is not False:
+            hills_dict['hills_im_median'].append(im_median)
+
+            im_median_int = int(im_median/paseftol)
+            hills_dict['hills_im_median_fast_dict'][im_median_int-1].add(idx_1)
+            hills_dict['hills_im_median_fast_dict'][im_median_int].add(idx_1)
+            hills_dict['hills_im_median_fast_dict'][im_median_int+1].add(idx_1)
+
 
         hills_dict['hills_intensity_array'].append(tmp_intensity)
         hills_dict['hills_scan_sets'].append(tmp_scans_set)
@@ -531,7 +552,7 @@ def centroid_pasef_data(data_for_analyse_tmp, args, mz_step):
         
     return data_for_analyse_tmp
 
-def detect_hills(data_for_analyse_tmp, args, mz_step):
+def detect_hills(data_for_analyse_tmp, args, mz_step, paseftol):
 
     hills_dict = {}
 
@@ -542,6 +563,9 @@ def detect_hills(data_for_analyse_tmp, args, mz_step):
     hills_dict['scan_idx_array'] = []
     hills_dict['mzs_array'] = []
     hills_dict['intensity_array'] = []
+    if paseftol is not False:
+        hills_dict['im_array'] = []
+        prev_fast_dict_im = dict()
 
     # hills_idx_array = []
     # orig_idx_array = []
@@ -552,8 +576,11 @@ def detect_hills(data_for_analyse_tmp, args, mz_step):
     last_idx = -1
     prev_idx = -1
     prev_fast_dict = dict()
+    # prev_median_error = hill_mass_accuracy * 2 / 15
 
     for spec_idx, z in enumerate(data_for_analyse_tmp):
+
+        # active_masses_array = []
 
         len_mz = len(z['m/z array'])
 
@@ -568,6 +595,18 @@ def detect_hills(data_for_analyse_tmp, args, mz_step):
 
         hills_dict['mzs_array'].extend(z['m/z array'])
         hills_dict['intensity_array'].extend(z['intensity array'])
+
+        if paseftol is not False:
+            im_sorted = z['mean inverse reduced ion mobility array'][idx_for_sort]
+            hills_dict['im_array'].extend(z['mean inverse reduced ion mobility array'])
+
+            fast_dict_im = defaultdict(set)
+            fast_array_im = (im_sorted/paseftol).astype(int)
+            for idx, fm in zip(basic_id_sorted, fast_array_im):
+                fast_dict_im[fm-1].add(idx)
+                fast_dict_im[fm+1].add(idx)
+                fast_dict_im[fm].add(idx)
+
         
         fast_dict = defaultdict(set)
         fast_array = (mz_sorted/mz_step).astype(int)
@@ -578,22 +617,31 @@ def detect_hills(data_for_analyse_tmp, args, mz_step):
 
         banned_prev_idx_set = set()
 
-        for idx, fm in zip(basic_id_sorted, fast_array):
+        for idx, fm, fi in zip(basic_id_sorted, fast_array, (fast_array if paseftol is False else fast_array_im)):
             if fm in prev_fast_dict:
+
+                # best_active_mass_diff = 1e6
+                # best_active_flag = False
 
                 best_mass_diff = 1e6
                 best_idx_prev = False
                 mz_cur = z['m/z array'][idx]
                 for idx_prev in prev_fast_dict[fm]:
-                    if idx_prev not in banned_prev_idx_set:
+                    if idx_prev not in banned_prev_idx_set and (paseftol is False or idx_prev in prev_fast_dict_im[fi]):
                         cur_mass_diff = abs(mz_cur - data_for_analyse_tmp[spec_idx-1]['m/z array'][idx_prev]) / mz_cur * 1e6
                         if cur_mass_diff <= hill_mass_accuracy and cur_mass_diff <= best_mass_diff:
+                        # if cur_mass_diff <= prev_median_error * 3 and cur_mass_diff <= best_mass_diff:
+                            # best_active_mass_diff = cur_mass_diff
+                            # best_active_flag = True
+                            # if cur_mass_diff <= prev_median_error * 15 / 2:
                             best_mass_diff = cur_mass_diff
                             best_idx_prev = idx_prev
                             # hills_dict['hills_idx_array'][last_idx+1+idx] = prev_idx + 1 + idx_prev
                             hills_dict['hills_idx_array'][last_idx+1+idx] = hills_dict['hills_idx_array'][prev_idx+1+idx_prev]
                 if best_idx_prev is not False:
                     banned_prev_idx_set.add(best_idx_prev)
+                # if best_active_flag:
+                #     active_masses_array.append(best_active_mass_diff)
 
 
                     # cur_mass_diff = (mz_cur - data_for_analyse_tmp[spec_idx-1]['m/z array'][idx_prev]) / mz_cur * 1e6
@@ -606,8 +654,16 @@ def detect_hills(data_for_analyse_tmp, args, mz_step):
 
 
         prev_fast_dict = fast_dict
+        if paseftol is not False:
+            prev_fast_dict_im = fast_dict_im
         prev_idx = last_idx
         last_idx = last_idx+len_mz
+
+        # if len(active_masses_array) > 100:
+        #     prev_median_error = np.median(active_masses_array)
+
+        #     # print(prev_median_error, ', median ppm')
+        #     # break
 
     print(last_idx)
     print(len(hills_dict['hills_idx_array']))
@@ -657,7 +713,8 @@ def process_mzml(args):
 
             cnt += 1
 
-            # if 175 <= cnt <= 225:
+            # if len(data_for_analyse) > 50:
+            #     break
 
             if len(z['m/z array']):
                 data_for_analyse.append(z)
