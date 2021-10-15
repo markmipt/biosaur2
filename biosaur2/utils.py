@@ -3,6 +3,21 @@ import numpy as np
 from collections import defaultdict, Counter
 from os import path
 import math
+from scipy.optimize import curve_fit
+
+def noisygaus(x, a, x0, sigma, b):
+    return a * np.exp(-(x - x0) ** 2 / (2 * sigma ** 2)) + b
+
+def calibrate_mass(bwidth, mass_left, mass_right, true_md):
+
+    bbins = np.arange(-mass_left, mass_right, bwidth)
+    H1, b1 = np.histogram(true_md, bins=bbins)
+    b1 = b1 + bwidth
+    b1 = b1[:-1]
+
+    popt, pcov = curve_fit(noisygaus, b1, H1, p0=[1, np.median(true_md), 1, 1])
+    mass_shift, mass_sigma = popt[1], abs(popt[2])
+    return mass_shift, mass_sigma, pcov[0][0]
 
 def meanfilt(data, window_width):
     cumsum_vec = np.cumsum(np.insert(data, 0, 0))
@@ -191,7 +206,8 @@ def checking_cos_correlation_for_carbon(
 
     exp_list_len = len(experimental_list)
 
-    for shf in [0, 1]:
+    # for shf in [0, 1]:
+    for shf in [0, ]:
 
         if allowed_shift is False or shf == allowed_shift:
 
@@ -576,7 +592,8 @@ def detect_hills(data_for_analyse_tmp, args, mz_step, paseftol):
     last_idx = -1
     prev_idx = -1
     prev_fast_dict = dict()
-    # prev_median_error = hill_mass_accuracy * 2 / 15
+    # prev_median_error = hill_mass_accuracy / 5
+    # mass_shift = 0
 
     for spec_idx, z in enumerate(data_for_analyse_tmp):
 
@@ -624,19 +641,23 @@ def detect_hills(data_for_analyse_tmp, args, mz_step, paseftol):
                 # best_active_flag = False
 
                 best_mass_diff = 1e6
+                best_intensity = 0
                 best_idx_prev = False
                 mz_cur = z['m/z array'][idx]
                 for idx_prev in prev_fast_dict[fm]:
                     if idx_prev not in banned_prev_idx_set and (paseftol is False or idx_prev in prev_fast_dict_im[fi]):
-                        cur_mass_diff = abs(mz_cur - data_for_analyse_tmp[spec_idx-1]['m/z array'][idx_prev]) / mz_cur * 1e6
-                        if cur_mass_diff <= hill_mass_accuracy and cur_mass_diff <= best_mass_diff:
-                        # if cur_mass_diff <= prev_median_error * 3 and cur_mass_diff <= best_mass_diff:
-                            # best_active_mass_diff = cur_mass_diff
+                        cur_mass_diff_with_sign = (mz_cur - data_for_analyse_tmp[spec_idx-1]['m/z array'][idx_prev]) / mz_cur * 1e6
+                        cur_mass_diff = abs(cur_mass_diff_with_sign)
+                        cur_intensity = data_for_analyse_tmp[spec_idx-1]['intensity array'][idx_prev]
+                        # if cur_mass_diff <= hill_mass_accuracy and cur_mass_diff <= best_mass_diff:
+                        if cur_mass_diff <= hill_mass_accuracy and cur_intensity >= best_intensity:
+                        # if cur_mass_diff <= (prev_median_error * 5) and cur_intensity >= best_intensity:
+                        # if abs(cur_mass_diff_with_sign - mass_shift) <= (prev_median_error * 5) and cur_intensity >= best_intensity:
                             # best_active_flag = True
-                            # if cur_mass_diff <= prev_median_error * 15 / 2:
                             best_mass_diff = cur_mass_diff
+                            # best_active_mass_diff = cur_mass_diff_with_sign
+                            best_intensity = cur_intensity
                             best_idx_prev = idx_prev
-                            # hills_dict['hills_idx_array'][last_idx+1+idx] = prev_idx + 1 + idx_prev
                             hills_dict['hills_idx_array'][last_idx+1+idx] = hills_dict['hills_idx_array'][prev_idx+1+idx_prev]
                 if best_idx_prev is not False:
                     banned_prev_idx_set.add(best_idx_prev)
@@ -660,8 +681,27 @@ def detect_hills(data_for_analyse_tmp, args, mz_step, paseftol):
         last_idx = last_idx+len_mz
 
         # if len(active_masses_array) > 100:
-        #     prev_median_error = np.median(active_masses_array)
+        #     # prev_median_error = np.median(active_masses_array)
 
+        #     true_md = np.array(active_masses_array)
+
+        #     mass_left = -min(true_md)
+        #     mass_right = max(true_md)
+
+
+        #     try:
+        #         mass_shift, mass_sigma, covvalue = calibrate_mass(0.05, mass_left, mass_right, true_md)
+        #     except:
+        #         mass_shift = 0
+        #         mass_sigma = np.median(active_masses_array)
+        #     #     mass_shift, mass_sigma, covvalue = calibrate_mass(0.25, mass_left, mass_right, true_md)
+        #     # if np.isinf(covvalue):
+        #     #     mass_shift = 0
+        #     #     mass_sigma = np.median(active_masses_array)
+        #         # mass_shift, mass_sigma, covvalue = calibrate_mass(0.05, mass_left, mass_right, true_md)
+
+        #     print(mass_shift, mass_sigma, ', median ppm', len(active_masses_array))
+        #     prev_median_error = mass_sigma
         #     # print(prev_median_error, ', median ppm')
         #     # break
 

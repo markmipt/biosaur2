@@ -3,24 +3,7 @@ import numpy as np
 from collections import defaultdict, Counter
 from scipy.stats import binom
 from scipy.stats import scoreatpercentile
-from scipy.optimize import curve_fit
 import itertools
-
-
-def noisygaus(x, a, x0, sigma, b):
-    return a * np.exp(-(x - x0) ** 2 / (2 * sigma ** 2)) + b
-
-def calibrate_mass(bwidth, mass_left, mass_right, true_md):
-
-    bbins = np.arange(-mass_left, mass_right, bwidth)
-    H1, b1 = np.histogram(true_md, bins=bbins)
-    b1 = b1 + bwidth
-    b1 = b1[:-1]
-
-    popt, pcov = curve_fit(noisygaus, b1, H1, p0=[1, np.median(true_md), 1, 1])
-    mass_shift, mass_sigma = popt[1], abs(popt[2])
-    return mass_shift, mass_sigma, pcov[0][0]
-
 
 def process_file(args):
 
@@ -336,7 +319,7 @@ def process_file(args):
             isotopes_mass_error_map[i+1] = tmp
                     
         for ic in range(1, 10, 1):
-            if len(isotopes_mass_error_map[ic]) >= 1000:
+            if len(isotopes_mass_error_map[ic]) >= 1000 and ic == 1:
 
                 try:
 
@@ -347,11 +330,11 @@ def process_file(args):
 
 
                     try:
-                        mass_shift, mass_sigma, covvalue = calibrate_mass(0.05, mass_left, mass_right, true_md)
+                        mass_shift, mass_sigma, covvalue = utils.calibrate_mass(0.05, mass_left, mass_right, true_md)
                     except:
-                        mass_shift, mass_sigma, covvalue = calibrate_mass(0.25, mass_left, mass_right, true_md)
+                        mass_shift, mass_sigma, covvalue = utils.calibrate_mass(0.25, mass_left, mass_right, true_md)
                     if np.isinf(covvalue):
-                        mass_shift, mass_sigma, covvalue = calibrate_mass(0.05, mass_left, mass_right, true_md)
+                        mass_shift, mass_sigma, covvalue = utils.calibrate_mass(0.05, mass_left, mass_right, true_md)
                     # mass_shift = np.median(true_md)
                     # mass_sigma = np.std(true_md)
 
