@@ -4,3 +4,4 @@ numpy
 sklearn
 lightgbm
 pandas
+lxml

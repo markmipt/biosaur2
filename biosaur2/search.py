@@ -1,5 +1,5 @@
 from sys import argv
-from . import main, utils
+from . import main, utils, main_dia
 import argparse
 
 def run():
@@ -45,10 +45,17 @@ def run():
     # parser.add_argument('-deeplc', help='path to deeplc', default='')
     # parser.add_argument('-deeplc_library', help='path to deeplc library', default='')
     # parser.add_argument('-pl', help='path to list of peptides for RT calibration', default='')
+    parser.add_argument('-dia',  help='create mgf file for DIA MS/MS', action='store_true')
+    parser.add_argument('-diahtol', help='mass accuracy for DIA hills in ppm', default=25, type=float)
+    parser.add_argument('-diaminlh', help='minimum length for dia hill', default=1, type=int)
+    parser.add_argument('-mgf', help='path to output mgf file', default='')
+    # parser.add_argument('-diaitol', help='mass accuracy for DIA isotopes in ppm', default=25, type=float)
     args = vars(parser.parse_args())
 
     main.process_file(args)
     print('The feature detection is finished.')
+    if args['dia']:
+        main_dia.process_file(args)
 
 if __name__ == '__main__':
     run()

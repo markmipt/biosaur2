@@ -16,7 +16,7 @@ setup(
     long_description_content_type = 'text/markdown',
     author               = 'Mark Ivanov',
     author_email         = 'markmipt@gmail.com',
-    install_requires     = ['pyteomics', 'scipy', 'numpy', 'sklearn', 'matplotlib', 'pandas', 'seaborn', 'lightgbm'],
+    install_requires     = [line.strip() for line in open('requirements.txt')],
     classifiers          = ['Intended Audience :: Science/Research',
                             'Programming Language :: Python :: 3.9',
                             'Topic :: Education',

@@ -4,6 +4,7 @@ from collections import defaultdict, Counter
 from scipy.stats import binom
 from scipy.stats import scoreatpercentile
 import itertools
+from copy import deepcopy
 
 def process_file(args):
 
@@ -20,6 +21,9 @@ def process_file(args):
     RT_dict = dict()
 
     for faims_val in faims_set:
+
+        if len(faims_set) > 1:
+            print('Spectra analysis for CV = %.3f' % (faims_val, ))
 
         data_for_analyse_tmp = []
         for z in data_for_analyse:
@@ -39,7 +43,6 @@ def process_file(args):
         #Process ion mobility
 
         if all('ignore_ion_mobility' not in z for z in data_for_analyse_tmp):
-            print(sum(('ignore_ion_mobility' in z for z in data_for_analyse_tmp)), len(data_for_analyse_tmp))
             utils.centroid_pasef_data(data_for_analyse_tmp, args, mz_step)
         else:
             args['paseftol'] = False
@@ -50,14 +53,9 @@ def process_file(args):
 
         hills_dict = utils.split_peaks(hills_dict, data_for_analyse_tmp, args)
 
-        # hills_idx_array, orig_idx_array, scan_idx_array, mzs_array, intensity_array = utils.detect_hills(data_for_analyse_tmp, args, mz_step)
-
         hills_dict = utils.process_hills(hills_dict, data_for_analyse_tmp, mz_step, paseftol, args)
 
-        import pickle
-        pickle.dump(hills_dict, open('hills_dict.pickle', 'wb'))
-
-        print('All data converted to %d hills...' % (len(set(hills_dict['hills_idx_array'])), ))
+        print('Detected number of hills: %d' % (len(set(hills_dict['hills_idx_array'])), ))
 
         isotopes_mass_accuracy = args['itol']
 
@@ -99,19 +97,12 @@ def process_file(args):
         for charge in charges:
             isotope_series[charge] = dict()
 
-        cnt_tmp = 0
-
         for idx_1, hill_idx_1 in enumerate(hills_dict['hills_idx_array_unique']):
-
-            cnt_tmp += 1
-            if cnt_tmp % 100000 == 0:
-                print(cnt_tmp)
 
             if paseftol is not False:
                 im_mz_1 = hills_dict['hills_im_median'][idx_1]
                 im_to_check_fast = int(hills_dict['hills_im_median'][idx_1] / paseftol)
 
-            # banned_charges = set()
             banned_charges = dict()
 
             # Monoisotope candidate m/z value
@@ -128,114 +119,71 @@ def process_file(args):
                 
                 candidates = []
 
-                # if charge not in banned_charges:
-                if 1:
+                series_1 = idx_1
 
-                    series_1 = idx_1
+                k = i
+                ks = i
+                for isotope_number in isotopes_list[1:]:
 
-                    k = i
-                    ks = i
-                    for isotope_number in isotopes_list[1:]:
+                    tmp_candidates = []
 
-                        tmp_candidates = []
+                    m_to_check = hill_mz_1 + (1.00335 * isotope_number / charge)
+                    m_to_check_fast = int(m_to_check/mz_step)
 
-                        m_to_check = hill_mz_1 + (1.00335 * isotope_number / charge)
-                        m_to_check_fast = int(m_to_check/mz_step)
+                    for idx_2 in hills_dict['hills_mz_median_fast_dict'][m_to_check_fast]:
 
-                        for idx_2 in hills_dict['hills_mz_median_fast_dict'][m_to_check_fast]:
+                        if paseftol is False or idx_2 in hills_dict['hills_im_median_fast_dict'][im_to_check_fast]:
 
-                            if paseftol is False or idx_2 in hills_dict['hills_im_median_fast_dict'][im_to_check_fast]:
+                            series_2 = idx_2
+                            
+                            if isotope_number > isotope_series[charge].get((series_1, series_2), 0):
 
-                                series_2 = idx_2
-                                
-                                if isotope_number > isotope_series[charge].get((series_1, series_2), 0):
+                                hill_scans_2 = hills_dict['hills_scan_sets'][idx_2]
+                                hill_length_2 = hills_dict['hills_lengths'][idx_2]
+                                hill_length_2_morethan1 = hill_length_2 > 1
 
-                                    hill_scans_2 = hills_dict['hills_scan_sets'][idx_2]
-                                    hill_length_2 = hills_dict['hills_lengths'][idx_2]
-                                    hill_length_2_morethan1 = hill_length_2 > 1
+                                if len(hill_scans_1.intersection(hill_scans_2)) >= 2:
 
-                                    if len(hill_scans_1.intersection(hill_scans_2)) >= 2:
-                                    # if (hill_length_1_morethan1 and hill_length_2_morethan1 and len(hill_scans_1.intersection(hill_scans_2)) > 0) \
-                                    #     or (hill_length_1_morethan1 and not hill_length_2_morethan1 and hill_scans_2 in hill_scans_1) \
-                                    #     or (not hill_length_1_morethan1 and hill_length_2_morethan1 and hill_scans_1 in hill_scans_2) \
-                                    #     or (not hill_length_1_morethan1 and not hill_length_2_morethan1 and hill_scans_1 == hill_scans_2):
+                                    hill_mz_2 = hills_dict['hills_mz_median'][idx_2]
+                                    mass_diff_abs = hill_mz_2 - m_to_check
 
-                                        hill_mz_2 = hills_dict['hills_mz_median'][idx_2]
-                                        mass_diff_abs = hill_mz_2 - m_to_check
+                                    if abs(mass_diff_abs) <= mz_tol:
 
-                                        if abs(mass_diff_abs) <= mz_tol:# and (peak.finished_hills[i].opt_ion_mobility is None or abs(peak.finished_hills[i].opt_ion_mobility-peak.finished_hills[j].opt_ion_mobility) <= 0.01):
+                                        if (hill_length_1_morethan1 and hill_length_2_morethan1):
 
-                                            # cos_cor_test = cos_correlation_fill_zeroes(
-                                            #                     peak.finished_hills[i],
-                                            #                     peak.finished_hills[j])
+                                            hills_dict, hill_idict_1, hill_sqrt_of_i_1 = utils.get_and_calc_values_for_cos_corr(hills_dict, idx_1, hill_length_1_morethan1)
+                                            hills_dict, hill_idict_2, hill_sqrt_of_i_2 = utils.get_and_calc_values_for_cos_corr(hills_dict, idx_2, hill_length_2_morethan1)
 
-                                            # if cos_cor_test >= 0.6:
+                                            cos_cor_RT = utils.cos_correlation(hill_length_1, hill_scans_1, hill_idict_1, hill_sqrt_of_i_1, hill_length_2, hill_scans_2, hill_idict_2, hill_sqrt_of_i_2)
+                                        else:
+                                            cos_cor_RT = 1.0
 
-                                            if (hill_length_1_morethan1 and hill_length_2_morethan1):
+                                        if cos_cor_RT >= 0.6:
 
-                                                hills_dict, hill_idict_1, hill_sqrt_of_i_1 = utils.get_and_calc_values_for_cos_corr(hills_dict, idx_1)
-                                                hills_dict, hill_idict_2, hill_sqrt_of_i_2 = utils.get_and_calc_values_for_cos_corr(hills_dict, idx_2)
+                                            hill_idx_2 = hills_dict['hills_idx_array_unique'][idx_2]
 
-                                                # hill_idict_1 = hills_dict['hills_idict'][idx_1]
-                                                # if hill_idict_1 is None:
-                                                #     hill_idict_1 = dict()
-                                                #     for scan_id_val, intensity_val in zip(hills_dict['hills_scan_lists'][idx_1], hills_dict['hills_intensity_array'][idx_1]):
-                                                #         hill_idict_1[scan_id_val] = intensity_val
-                                                #     hills_dict['hills_idict'][idx_1] = hill_idict_1
+                                            hills_dict, _, _ = utils.get_and_calc_apex_intensity_and_scan(hills_dict, hill_length_1_morethan1, idx_1)
+                                            hills_dict, _, _ = utils.get_and_calc_apex_intensity_and_scan(hills_dict, hill_length_2_morethan1, idx_2)
 
-                                                # hill_sqrt_of_i_1 = hills_dict['hill_sqrt_of_i'][idx_1]
-                                                # if hill_sqrt_of_i_1 is None:
-                                                #     hill_sqrt_of_i_1 = math.sqrt(sum(v**2 for v in hill_idict_1.values()))
-                                                #     hills_dict['hill_sqrt_of_i'][idx_1] = hill_sqrt_of_i_1
+                                            local_isotopes_dict = {
+                                                'isotope_number': isotope_number,
+                                                'isotope_hill_idx': hill_idx_2,
+                                                'isotope_idx': idx_2,
+                                                'cos_cor': cos_cor_RT,
+                                                'mass_diff_ppm': mass_diff_abs/m_to_check*1e6
+                                            }
+
+                                            tmp_candidates.append(local_isotopes_dict)
+
+                                            isotope_series[charge][(series_1, series_2)] = isotope_number
+                                            series_1 = idx_2
 
 
-                                                # hill_idict_2 = hills_dict['hills_idict'][idx_2]
-                                                # if hill_idict_2 is None:
-                                                #     hill_idict_2 = dict()
-                                                #     for scan_id_val, intensity_val in zip(hills_dict['hills_scan_lists'][idx_2], hills_dict['hills_intensity_array'][idx_2]):
-                                                #         hill_idict_2[scan_id_val] = intensity_val
-                                                #     hills_dict['hills_idict'][idx_2] = hill_idict_2
+                    if len(tmp_candidates):
+                        candidates.append(tmp_candidates)
 
-                                                # hill_sqrt_of_i_2 = hills_dict['hill_sqrt_of_i'][idx_2]
-                                                # if hill_sqrt_of_i_2 is None:
-                                                #     hill_sqrt_of_i_2 = math.sqrt(sum(v**2 for v in hill_idict_2.values()))
-                                                #     hills_dict['hill_sqrt_of_i'][idx_2] = hill_sqrt_of_i_2
-
-                                                cos_cor_RT = utils.cos_correlation(hill_length_1, hill_scans_1, hill_idict_1, hill_sqrt_of_i_1, hill_length_2, hill_scans_2, hill_idict_2, hill_sqrt_of_i_2)
-                                            else:
-                                                cos_cor_RT = 1.0
-
-                                            if cos_cor_RT >= 0.6:
-
-                                                hill_idx_2 = hills_dict['hills_idx_array_unique'][idx_2]
-
-                                                hills_dict, _, _ = utils.get_and_calc_apex_intensity_and_scan(hills_dict, hill_length_1_morethan1, idx_1)
-                                                hills_dict, _, _ = utils.get_and_calc_apex_intensity_and_scan(hills_dict, hill_length_2_morethan1, idx_2)
-
-                                                local_isotopes_dict = {
-                                                    'isotope_number': isotope_number,
-                                                    'isotope_hill_idx': hill_idx_2,
-                                                    'isotope_idx': idx_2,
-                                                    # 'charge': charge,
-                                                    'cos_cor': cos_cor_RT,
-                                                    'mass_diff_ppm': mass_diff_abs/m_to_check*1e6
-                                                }
-
-                                                tmp_candidates.append(local_isotopes_dict)
-
-                                                isotope_series[charge][(series_1, series_2)] = isotope_number
-                                                series_1 = idx_2
-
-                                                # tmp_candidates.append((j, charge, cos_cor_test, diff/m_to_check*1e6, 0))
-
-                                                # if numb == 1:
-                                                #     diff_for_output = diff / peak_2_mz
-
-                        if len(tmp_candidates):
-                            candidates.append(tmp_candidates)
-
-                        if len(candidates) < isotope_number:
-                            break
+                    if len(candidates) < isotope_number:
+                        break
 
 
 
@@ -246,6 +194,8 @@ def process_file(args):
                     tmp_intensity = a[int(100 * (neutral_mass // 100))]
 
                     _, hill_intensity_apex_1, hill_scan_apex_1 = utils.get_and_calc_apex_intensity_and_scan(hills_dict, 0, idx_1)
+                    mono_hills_scan_lists =  hills_dict['hills_scan_lists'][idx_1]
+                    mono_hills_intensity_list =  hills_dict['hills_intensity_array'][idx_1]
 
                     all_theoretical_int = [
                         hill_intensity_apex_1 *
@@ -286,22 +236,16 @@ def process_file(args):
                                 'shift': shift,
                                 'im': 0 if paseftol is False else im_mz_1,
                                 'intensity_array_for_cos_corr': [all_theoretical_int[:number_of_passed_isotopes+1], all_exp_intensity[:number_of_passed_isotopes+1]],
+                                'mono_hills_scan_lists': list(mono_hills_scan_lists),
+                                'mono_hills_intensity_list': list(mono_hills_intensity_list),
                             }
 
                             ready.append(local_res_dict)
 
-                            # for ch_v in charge_ban_map[charge]:
-                            #     banned_charges.add(ch_v)
-
                             for ch_v in charge_ban_map[charge]:
                                 banned_charges[ch_v] = max(number_of_passed_isotopes, banned_charges.get(ch_v, 1))
 
-                # break
-
         negative_mode = args['nm']
-
-        # import pickle
-        # pickle.dump(ready, open('/home/mark/ready.pickle', 'wb'))
 
         print('Number of potential isotope clusters: ', len(ready))
 
@@ -319,35 +263,38 @@ def process_file(args):
             isotopes_mass_error_map[i+1] = tmp
                     
         for ic in range(1, 10, 1):
-            if len(isotopes_mass_error_map[ic]) >= 1000 and ic == 1:
+            if ic == 1:
 
-                try:
-
-                    true_md = np.array(isotopes_mass_error_map[ic])
-
-                    mass_left = -min(isotopes_mass_error_map[ic])
-                    mass_right = max(isotopes_mass_error_map[ic])
-
+                if len(isotopes_mass_error_map[ic]) >= 100:
 
                     try:
+
+                        true_md = np.array(isotopes_mass_error_map[ic])
+
+                        mass_left = -min(isotopes_mass_error_map[ic])
+                        mass_right = max(isotopes_mass_error_map[ic])
+
+
                         mass_shift, mass_sigma, covvalue = utils.calibrate_mass(0.05, mass_left, mass_right, true_md)
+                        if abs(mass_shift) >= max(mass_left, mass_right):
+                            mass_shift, mass_sigma, covvalue = utils.calibrate_mass(0.25, mass_left, mass_right, true_md)
+                        if np.isinf(covvalue):
+                            mass_shift, mass_sigma, covvalue = utils.calibrate_mass(0.05, mass_left, mass_right, true_md)
+
+                        isotopes_mass_error_map[ic] = [mass_shift, mass_sigma]
+
                     except:
-                        mass_shift, mass_sigma, covvalue = utils.calibrate_mass(0.25, mass_left, mass_right, true_md)
-                    if np.isinf(covvalue):
-                        mass_shift, mass_sigma, covvalue = utils.calibrate_mass(0.05, mass_left, mass_right, true_md)
-                    # mass_shift = np.median(true_md)
-                    # mass_sigma = np.std(true_md)
+                        isotopes_mass_error_map[ic] = [0, 10]
 
-                    isotopes_mass_error_map[ic] = [mass_shift, mass_sigma]
-
-                except:
-                    isotopes_mass_error_map[ic] = isotopes_mass_error_map[ic-1]
+                else:
+                    isotopes_mass_error_map[ic] = [0, 10]
 
             else:
-                isotopes_mass_error_map[ic] = isotopes_mass_error_map[ic-1]
+                isotopes_mass_error_map[ic] = deepcopy(isotopes_mass_error_map[ic-1])
+                isotopes_mass_error_map[ic][0] = isotopes_mass_error_map[ic][0] - 0.45
 
-        for k, v in isotopes_mass_error_map.items():
-            print(k, v)
+        print('Average mass shift between monoisotopic and first 13C isotope: %.3f ppm' % (isotopes_mass_error_map[0][0]))
+        print('Average mass std between monoisotopic and first 13C isotope: %.3f ppm' % (isotopes_mass_error_map[0][1]))
 
 
         max_l = len(ready)
