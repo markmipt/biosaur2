@@ -293,8 +293,8 @@ def process_file(args):
                 isotopes_mass_error_map[ic] = deepcopy(isotopes_mass_error_map[ic-1])
                 isotopes_mass_error_map[ic][0] = isotopes_mass_error_map[ic][0] - 0.45
 
-        print('Average mass shift between monoisotopic and first 13C isotope: %.3f ppm' % (isotopes_mass_error_map[0][0]))
-        print('Average mass std between monoisotopic and first 13C isotope: %.3f ppm' % (isotopes_mass_error_map[0][1]))
+        print('Average mass shift between monoisotopic and first 13C isotope: %.3f ppm' % (isotopes_mass_error_map[1][0]))
+        print('Average mass std between monoisotopic and first 13C isotope: %.3f ppm' % (isotopes_mass_error_map[1][1]))
 
 
         max_l = len(ready)
