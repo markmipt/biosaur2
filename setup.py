@@ -25,6 +25,5 @@ setup(
                             'Topic :: Scientific/Engineering :: Physics'],
     license              = 'License :: OSI Approved :: Apache Software License',
     packages             = find_packages(),
-    # package_data         = {'ms1searchpy': ['Dinosaur/*']},
     entry_points         = {'console_scripts': ['biosaur2 = biosaur2.search:run',]}
     )
