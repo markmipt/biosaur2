@@ -780,6 +780,9 @@ def process_mzml(args):
     print('Number of MS1 scans: ' + str(len(data_for_analyse)))
     print('Number of skipped MS1 scans: ' + str(skipped))
 
+    if len(data_for_analyse) == 0:
+        raise Exception('no MS1 scans in input file')
+
     return data_for_analyse
 
 

@@ -1,6 +1,7 @@
 from sys import argv
 from . import main, utils, main_dia
 import argparse
+from copy import deepcopy
 
 def run():
     parser = argparse.ArgumentParser(
@@ -14,7 +15,7 @@ def run():
     ''',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    parser.add_argument('file', help='input mzML file')
+    parser.add_argument('files', help='input mzML files', nargs='+')
     parser.add_argument('-mini', help='min intensity', default=1, type=float)
     parser.add_argument('-minmz', help='min mz', default=350, type=float)
     parser.add_argument('-maxmz', help='max mz', default=1500, type=float)
@@ -52,10 +53,18 @@ def run():
     # parser.add_argument('-diaitol', help='mass accuracy for DIA isotopes in ppm', default=25, type=float)
     args = vars(parser.parse_args())
 
-    main.process_file(args)
-    print('The feature detection is finished.')
-    if args['dia']:
-        main_dia.process_file(args)
+    for filename in args['files']:
+        print('Starting file: %s' % (filename, ))
+        try:
+            args['file'] = filename
+            main.process_file(deepcopy(args))
+            print('The feature detection is finished for file: %s' % (filename, ))
+            if args['dia']:
+                main_dia.process_file(deepcopy(args))
+        except Exception as e:
+            print(e)
+            print('Search is failed for file: %s' % (filename, ))
+        print('\n')
 
 if __name__ == '__main__':
     run()
