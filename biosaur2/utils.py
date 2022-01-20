@@ -248,10 +248,11 @@ def calc_peptide_features(hills_dict, peptide_features, negative_mode, faims_val
 
         pep_feature['massCalib'] = pep_feature['mz'] * pep_feature['charge'] - 1.0072765 * pep_feature['charge'] * (-1 if negative_mode else 1) - pep_feature['shift'] * 1.00335
 
+        pep_feature['scanApex'] = hills_dict['hills_scan_apex'][pep_feature['monoisotope idx']]
         pep_feature['rtApex'] = RT_dict[hills_dict['hills_scan_apex'][pep_feature['monoisotope idx']]+data_start_id]
         pep_feature['intensityApex'] = hills_dict['hills_intensity_apex'][pep_feature['monoisotope idx']]
-        pep_feature['rtStart'] = 1
-        pep_feature['rtEnd'] = 1
+        pep_feature['rtStart'] = RT_dict[hills_dict['hills_scan_lists'][pep_feature['monoisotope idx']][0]+data_start_id]
+        pep_feature['rtEnd'] = RT_dict[hills_dict['hills_scan_lists'][pep_feature['monoisotope idx']][-1]+data_start_id]
 
     return peptide_features
 
@@ -281,6 +282,7 @@ def write_output(peptide_features, args, write_header=True):
         'im',
         'mono_hills_scan_lists',
         'mono_hills_intensity_list',
+        'scanApex',
     ]
 
     if write_header:
