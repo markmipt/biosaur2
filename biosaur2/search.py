@@ -1,7 +1,7 @@
-from sys import argv
-from . import main, utils, main_dia
+from . import main, main_dia
 import argparse
 from copy import deepcopy
+import logging
 
 def run():
     parser = argparse.ArgumentParser(
@@ -50,21 +50,26 @@ def run():
     parser.add_argument('-diahtol', help='mass accuracy for DIA hills in ppm', default=25, type=float)
     parser.add_argument('-diaminlh', help='minimum length for dia hill', default=1, type=int)
     parser.add_argument('-mgf', help='path to output mgf file', default='')
+    parser.add_argument('-debug', help='log debugging information', action='store_true')
     # parser.add_argument('-diaitol', help='mass accuracy for DIA isotopes in ppm', default=25, type=float)
     args = vars(parser.parse_args())
+    logging.basicConfig(format='%(levelname)9s: %(asctime)s %(message)s',
+            datefmt='[%H:%M:%S]', level=[logging.INFO, logging.DEBUG][args['debug']])
+    logging.getLogger('matplotlib').setLevel(logging.WARNING)
+    logger = logging.getLogger(__name__)
+    logger.debug('Starting with args: %s', args)
 
     for filename in args['files']:
-        print('Starting file: %s' % (filename, ))
+        logger.info('Starting file: %s', filename)
         try:
             args['file'] = filename
             main.process_file(deepcopy(args))
-            print('The feature detection is finished for file: %s' % (filename, ))
+            logger.info('Feature detection is finished for file: %s', filename)
             if args['dia']:
                 main_dia.process_file(deepcopy(args))
         except Exception as e:
-            print(e)
-            print('Search is failed for file: %s' % (filename, ))
-        print('\n')
+            logger.error(e)
+            logger.error('Feature detection failed for file: %s', filename)
 
 if __name__ == '__main__':
     run()

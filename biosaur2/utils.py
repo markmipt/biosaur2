@@ -4,6 +4,9 @@ from collections import defaultdict, Counter
 from os import path
 import math
 from scipy.optimize import curve_fit
+import logging
+
+logger = logging.getLogger(__name__)
 
 def noisygaus(x, a, x0, sigma, b):
     return a * np.exp(-(x - x0) ** 2 / (2 * sigma ** 2)) + b
@@ -71,7 +74,6 @@ def split_peaks(hills_dict, data_for_analyse_tmp, args):
                 tmp_scans = hills_dict['scan_idx_array'][idx_start:idx_end]
                 tmp_orig_idx = hills_dict['orig_idx_array'][idx_start:idx_end]
                 tmp_intensity = [data_for_analyse_tmp[scan_val]['intensity array'][orig_idx_val] for orig_idx_val, scan_val in zip(tmp_orig_idx, tmp_scans)]
-                tmp_mz_array = [data_for_analyse_tmp[scan_val]['m/z array'][orig_idx_val] for orig_idx_val, scan_val in zip(tmp_orig_idx, tmp_scans)]
 
                 smothed_intensity = meanfilt(tmp_intensity, 2)
                 c_len = hill_length - min_length_hill
@@ -111,7 +113,7 @@ def split_peaks(hills_dict, data_for_analyse_tmp, args):
 
             idx_start = idx_end
 
-        print(len(set(hills_dict['hills_idx_array'])), len(hills_dict['hills_idx_array_unique']), '!!!')
+        logger.debug('%d %d !!!', len(set(hills_dict['hills_idx_array'])), len(hills_dict['hills_idx_array_unique']))
 
         hills_dict['hills_idx_array'] = list(hills_dict['hills_idx_array'])
         del hills_dict['hills_idx_array_unique']
@@ -171,8 +173,8 @@ def cos_correlation(hill_length_1, hill_scans_1, hill_idict_1, hill_sqrt_of_i_1,
         h1_val = hill_idict_1.get(i, 0)
         h2_val = hill_idict_2.get(i, 0)
         top += h1_val * h2_val
-    
-    
+
+
     bottom = hill_sqrt_of_i_1 * hill_sqrt_of_i_2
     return top / bottom
 
@@ -330,7 +332,7 @@ def process_hills(hills_dict, data_for_analyse_tmp, mz_step, paseftol, args, dia
         if paseftol is not False:
             hills_dict['hills_im_median'] = []
             hills_dict['hills_im_median_fast_dict'] = defaultdict(set)
-            
+
         hills_dict['hills_intensity_array'] = []
         hills_dict['hills_scan_sets'] = []
         hills_dict['hills_scan_lists'] = []
@@ -416,8 +418,8 @@ def centroid_pasef_data(data_for_analyse_tmp, args, mz_step):
     cnt_ms1_scans = len(data_for_analyse_tmp)
     for spec_idx, z in enumerate(data_for_analyse_tmp):
 
-        print('PASEF scans analysis: %d/%d' % (spec_idx+1, cnt_ms1_scans))
-        print('number of m/z peaks in scan: %d' % (len(z['m/z array'])))
+        logger.info('PASEF scans analysis: %d/%d', spec_idx+1, cnt_ms1_scans)
+        logger.info('number of m/z peaks in scan: %d', len(z['m/z array']))
 
         if 'ignore_ion_mobility' not in z:
 
@@ -435,10 +437,6 @@ def centroid_pasef_data(data_for_analyse_tmp, args, mz_step):
             ion_mobility_ar_fast = (ion_mobility_ar/ion_mobility_step).astype(int)
             mz_ar_fast = (mz_ar/mz_step).astype(int)
 
-            max_mz_int = max(mz_ar_fast) * 2
-
-            # print('HERE1')
-
             idx = np.argsort(mz_ar_fast)
             mz_ar_fast = mz_ar_fast[idx]
             ion_mobility_ar_fast = ion_mobility_ar_fast[idx]
@@ -447,14 +445,8 @@ def centroid_pasef_data(data_for_analyse_tmp, args, mz_step):
             intensity_ar = intensity_ar[idx]
             ion_mobility_ar = ion_mobility_ar[idx]
 
-            idx_ar = list(range(len(mz_ar)))
-
-            # print('HERE2')
-
-            # for peak_idx in idx_ar:
-
             max_peak_idx = len(mz_ar)
-            
+
             peak_idx = 0
             while peak_idx < max_peak_idx:
 
@@ -509,16 +501,15 @@ def centroid_pasef_data(data_for_analyse_tmp, args, mz_step):
                     ion_mobility_ar_new.append(ion_mob_new)
 
                 peak_idx += 1
-            
+
             data_for_analyse_tmp[spec_idx]['m/z array'] = np.array(mz_ar_new)
             data_for_analyse_tmp[spec_idx]['intensity array'] = np.array(intensity_ar_new)
             data_for_analyse_tmp[spec_idx]['mean inverse reduced ion mobility array'] = np.array(ion_mobility_ar_new)
 
-        print('number of m/z peaks in scan after centroiding: %d' % (len(data_for_analyse_tmp[spec_idx]['m/z array'])))
-        print('\n')
+        logger.info('number of m/z peaks in scan after centroiding: %d', len(data_for_analyse_tmp[spec_idx]['m/z array']))
 
     data_for_analyse_tmp = [z for z in data_for_analyse_tmp if len(z['m/z array'] > 0)]
-    print('Number of MS1 scans after combining ion mobility peaks: ', len(data_for_analyse_tmp))
+    logger.info('Number of MS1 scans after combining ion mobility peaks: %d', len(data_for_analyse_tmp))
 
             # fast_dict = defaultdict(set)
             # for peak_idx, (mz_val_int, ion_mob_val_int) in enumerate(zip(mz_ar_fast, ion_mobility_ar_fast)):
@@ -544,7 +535,7 @@ def centroid_pasef_data(data_for_analyse_tmp, args, mz_step):
     #             hill_length.append(len(fast_dict[(mz_val_int, ion_mob_val_int)]))
     #             peak_idx_array.append(peak_idx)
     #         peak_idx_array = np.array(peak_idx_array)
-        
+
 
     #         print('HERE3')
 
@@ -557,7 +548,7 @@ def centroid_pasef_data(data_for_analyse_tmp, args, mz_step):
     #                 all_idx = set([p_id for p_id in fast_dict[(mz_val_int, ion_mob_val_int)] if p_id not in added_idx])
     #                 if len(all_idx):
     #                     added_idx.update(all_idx)
-            
+
     #                     all_intensity = [intensity_ar[p_id] for p_id in all_idx]
     #                     i_val_new = sum(all_intensity)
 
@@ -572,14 +563,14 @@ def centroid_pasef_data(data_for_analyse_tmp, args, mz_step):
     #                         intensity_ar_new.append(i_val_new)
     #                         mz_ar_new.append(mz_val_new)
     #                         ion_mobility_ar_new.append(ion_mob_new)
-            
+
     #         data_for_analyse_tmp[spec_idx]['m/z array'] = np.array(mz_ar_new)
     #         data_for_analyse_tmp[spec_idx]['intensity array'] = np.array(intensity_ar_new)
     #         data_for_analyse_tmp[spec_idx]['mean inverse reduced ion mobility array'] = np.array(ion_mobility_ar_new)
 
     # data_for_analyse_tmp = [z for z in data_for_analyse_tmp if len(z['m/z array'] > 0)]
     # print('Number of MS1 scans after combining ion mobility peaks: ', len(data_for_analyse_tmp))
-        
+
     return data_for_analyse_tmp
 
 def detect_hills(data_for_analyse_tmp, args, mz_step, paseftol, dia=False):
@@ -641,7 +632,7 @@ def detect_hills(data_for_analyse_tmp, args, mz_step, paseftol, dia=False):
                 fast_dict_im[fm+1].add(idx)
                 fast_dict_im[fm].add(idx)
 
-        
+
         fast_dict = defaultdict(set)
         fast_array = (mz_sorted/mz_step).astype(int)
         for idx, fm in zip(basic_id_sorted, fast_array):
@@ -657,7 +648,6 @@ def detect_hills(data_for_analyse_tmp, args, mz_step, paseftol, dia=False):
                 # best_active_mass_diff = 1e6
                 # best_active_flag = False
 
-                best_mass_diff = 1e6
                 best_intensity = 0
                 best_idx_prev = False
                 mz_cur = z['m/z array'][idx]
@@ -671,7 +661,6 @@ def detect_hills(data_for_analyse_tmp, args, mz_step, paseftol, dia=False):
                         # if cur_mass_diff <= (prev_median_error * 5) and cur_intensity >= best_intensity:
                         # if abs(cur_mass_diff_with_sign - mass_shift) <= (prev_median_error * 5) and cur_intensity >= best_intensity:
                             # best_active_flag = True
-                            best_mass_diff = cur_mass_diff
                             # best_active_mass_diff = cur_mass_diff_with_sign
                             best_intensity = cur_intensity
                             best_idx_prev = idx_prev
@@ -722,9 +711,9 @@ def detect_hills(data_for_analyse_tmp, args, mz_step, paseftol, dia=False):
         #     # print(prev_median_error, ', median ppm')
         #     # break
 
-    print(last_idx)
-    print(len(hills_dict['hills_idx_array']))
-    print(len(set(hills_dict['hills_idx_array'])))
+    logger.debug(last_idx)
+    logger.debug(len(hills_dict['hills_idx_array']))
+    logger.debug(len(set(hills_dict['hills_idx_array'])))
 
     return hills_dict#hills_idx_array, orig_idx_array, scan_idx_array, mzs_array, intensity_array
 
@@ -779,8 +768,8 @@ def process_mzml(args):
                 skipped += 1
 
 
-    print('Number of MS1 scans: ' + str(len(data_for_analyse)))
-    print('Number of skipped MS1 scans: ' + str(skipped))
+    logger.info('Number of MS1 scans: %d', len(data_for_analyse))
+    logger.info('Number of skipped MS1 scans: %d', skipped)
 
     if len(data_for_analyse) == 0:
         raise Exception('no MS1 scans in input file')
@@ -842,7 +831,7 @@ def process_mzml_dia(args):
                 skipped += 1
 
 
-    print('Number of MS2 scans: ' + str(len(data_for_analyse)))
-    print('Number of skipped MS2 scans: ' + str(skipped))
+    logger.info('Number of MS2 scans: %d', len(data_for_analyse))
+    logger.info('Number of skipped MS2 scans: %d', skipped)
 
     return data_for_analyse

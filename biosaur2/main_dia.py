@@ -1,13 +1,13 @@
 from . import utils
-import numpy as np
-from collections import defaultdict, Counter
-from scipy.stats import binom
-from scipy.stats import scoreatpercentile
 import itertools
 from os import path
 import pandas as pd
 import ast
 import math
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def process_file(args):
 
@@ -39,7 +39,7 @@ def process_file(args):
     df1_features['hill_idict_1'] = df1_features.apply(calc_idict, axis=1)
     df1_features['hill_sqrt_of_i_1'] = df1_features.apply(calc_sqrt_of_i, axis=1)
 
-    print(df1_features.head())
+    logger.debug(df1_features.head())
 
 
     if args['mgf']:
@@ -53,7 +53,6 @@ def process_file(args):
 
 
     data_for_analyse = utils.process_mzml_dia(args)
-    write_header = True
 
     isolation_target_func = lambda x: x['precursorList']['precursor'][0]['isolationWindow']['isolation window target m/z']
     isolation_window_func = lambda x: x['precursorList']['precursor'][0]['isolationWindow']['isolation window lower offset']
@@ -61,13 +60,12 @@ def process_file(args):
     #Process faims
     faims_set = set([z.get('FAIMS compensation voltage', None) for z in data_for_analyse])
     if any(z is not None for z in faims_set):
-        print('Detected FAIMS values: %s' % str(faims_set))
+        logger.info('Detected FAIMS values: %s', faims_set)
 
     #Process windows
     windows_set = set([isolation_target_func(z) for z in data_for_analyse])
-    print('Detected windows values: %s' % str(windows_set))
+    logger.info('Detected windows values: %s', windows_set)
 
-    data_start_id = 0
     RT_dict = dict()
 
     for (faims_val, window_val) in itertools.product(faims_set, windows_set):
@@ -96,7 +94,7 @@ def process_file(args):
         #Process ion mobility
 
         if all('ignore_ion_mobility' not in z for z in data_for_analyse_tmp):
-            print(sum(('ignore_ion_mobility' in z for z in data_for_analyse_tmp)), len(data_for_analyse_tmp))
+            logger.debug('%d %d', sum(('ignore_ion_mobility' in z for z in data_for_analyse_tmp)), len(data_for_analyse_tmp))
             utils.centroid_pasef_data(data_for_analyse_tmp, args, mz_step)
         else:
             args['paseftol'] = False
@@ -117,7 +115,7 @@ def process_file(args):
 
         num_hills = len(set(hills_dict['hills_idx_array']))
 
-        print('All data converted to %d hills...' % (num_hills, ))
+        logger.info('All data converted to %d hills...', num_hills)
 
         # isotopes_mass_accuracy = args['itol']
 
@@ -139,7 +137,7 @@ def process_file(args):
         #     prec_masses.append(i)
         #     int_arr_norm = int_arr / int_arr.sum()
         #     a[i] = int_arr_norm
-        
+
         # min_charge = args['cmin']
         # max_charge = args['cmax']
         # charges = list(range(min_charge, max_charge + 1, 1)[::-1])
@@ -269,7 +267,7 @@ def process_file(args):
         #     mz_tol = isotopes_mass_accuracy * 1e-6 * hill_mz_1
 
         #     for charge in charges:
-                
+
         #         candidates = []
 
         #         # if charge not in banned_charges:
@@ -291,7 +289,7 @@ def process_file(args):
         #                     if paseftol is False or idx_2 in hills_dict['hills_im_median_fast_dict'][im_to_check_fast]:
 
         #                         series_2 = idx_2
-                                
+
         #                         if isotope_number > isotope_series[charge].get((series_1, series_2), 0):
 
         #                             hill_scans_2 = hills_dict['hills_scan_sets'][idx_2]
@@ -405,7 +403,7 @@ def process_file(args):
         #                     idx_2 = local_isotopes_dict['isotope_idx']
 
         #                     _, hill_intensity_apex_2, hill_scan_apex_2 = utils.get_and_calc_apex_intensity_and_scan(hills_dict, 0, idx_2)
-                            
+
         #                     all_exp_intensity.append(hill_intensity_apex_2)
         #                 (
         #                     cos_corr,
@@ -424,7 +422,7 @@ def process_file(args):
         #                         'hill_mz_1': hill_mz_1,
         #                         'isotopes': iter_candidates,
         #                         'nIsotopes': number_of_passed_isotopes,
-        #                         'nScans': hill_length_1, 
+        #                         'nScans': hill_length_1,
         #                         'charge': charge,
         #                         'FAIMS': faims_val,
         #                         'shift': shift,
@@ -452,7 +450,7 @@ def process_file(args):
 
         # isotopes_mass_error_map = {}
         # for ic in range(1, 10, 1):
-        #     isotopes_mass_error_map[ic] = []            
+        #     isotopes_mass_error_map[ic] = []
 
         # for i in range(9):
         #     tmp = []
@@ -461,7 +459,7 @@ def process_file(args):
         #         if len(isotopes) >= i + 1:
         #             tmp.append(isotopes[i]['mass_diff_ppm'])
         #     isotopes_mass_error_map[i+1] = tmp
-                    
+
         # for ic in range(1, 10, 1):
         #     if len(isotopes_mass_error_map[ic]) >= 1000 and ic == 1:
 
@@ -499,9 +497,9 @@ def process_file(args):
 
         # while cur_l < max_l:
         #     pep_feature = ready[cur_l]
-                
+
         #     tmp = []
-            
+
         #     for cand in pep_feature['isotopes']:
         #         map_val = isotopes_mass_error_map[cand['isotope_number']]
         #         if abs(cand['mass_diff_ppm'] - map_val[0]) <= 5 * map_val[1]:
@@ -525,13 +523,13 @@ def process_file(args):
         #             ready[cur_l]['isotopes'] = tmp
         #             ready[cur_l]['nIsotopes'] = tmp_n_isotopes + 1
         #             ready[cur_l]['intensity_array_for_cos_corr'] = [all_theoretical_int, all_exp_intensity]
-                
+
         #         else:
         #             del ready[cur_l]
         #             max_l -= 1
         #             cur_l -= 1
-                
-                
+
+
         #     else:
         #         del ready[cur_l]
         #         max_l -= 1
@@ -562,7 +560,7 @@ def process_file(args):
         #         ready = sorted(ready, key=func_for_sort)
         #         cur_isotopes = n_iso
         #         cur_l = 0
-                
+
         #     if pep_feature['monoisotope hill idx'] not in ready_set:
         #         if not any(cand['isotope_hill_idx'] in ready_set for cand in pep_feature['isotopes']):
         #             ready_final.append(pep_feature)
@@ -575,7 +573,7 @@ def process_file(args):
 
         #         else:
         #             tmp = []
-                    
+
         #             for cand in pep_feature['isotopes']:
         #                 if cand['isotope_hill_idx'] not in ready_set:
         #                     tmp.append(cand)
@@ -598,13 +596,13 @@ def process_file(args):
         #                     ready[cur_l]['isotopes'] = tmp
         #                     ready[cur_l]['nIsotopes'] = tmp_n_isotopes + 1
         #                     ready[cur_l]['intensity_array_for_cos_corr'] = [all_theoretical_int, all_exp_intensity]
-                        
+
         #                 else:
         #                     del ready[cur_l]
         #                     max_l -= 1
         #                     cur_l -= 1
-                        
-                        
+
+
         #             else:
         #                 del ready[cur_l]
         #                 max_l -= 1
@@ -621,7 +619,7 @@ def process_file(args):
 
         # # import pickle
         # # pickle.dump(ready_final, open('/home/mark/ready_final.pickle', 'wb'))
-        
+
         # peptide_features = utils.calc_peptide_features(hills_dict, ready_final, negative_mode, faims_val, RT_dict, data_start_id)
 
         # utils.write_output(peptide_features, args, write_header)
