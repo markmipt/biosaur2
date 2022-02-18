@@ -55,15 +55,15 @@ def run():
 
     for filename in args['files']:
         print('Starting file: %s' % (filename, ))
-        try:
+        if 1:
             args['file'] = filename
             main.process_file(deepcopy(args))
             print('The feature detection is finished for file: %s' % (filename, ))
             if args['dia']:
                 main_dia.process_file(deepcopy(args))
-        except Exception as e:
-            print(e)
-            print('Search is failed for file: %s' % (filename, ))
+        # except Exception as e:
+        #     print(e)
+        #     print('Search is failed for file: %s' % (filename, ))
         print('\n')
 
 if __name__ == '__main__':
