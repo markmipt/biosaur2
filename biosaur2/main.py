@@ -1,13 +1,11 @@
 from . import utils
 import numpy as np
-from collections import defaultdict, Counter
 from scipy.stats import binom
-from scipy.stats import scoreatpercentile
 import itertools
 from copy import deepcopy
+import logging
+logger = logging.getLogger(__name__)
 from .cutils import get_initial_isotopes, checking_cos_correlation_for_carbon, split_peaks
-
-
 
 def process_file(args):
 
@@ -15,9 +13,10 @@ def process_file(args):
     write_header = True
 
     #Process faims
+
     faims_set = set([z.get('FAIMS compensation voltage', 0) for z in data_for_analyse])
     if any(z for z in faims_set):
-        print('Detected FAIMS values: %s' % str(faims_set))
+        logger.info('Detected FAIMS values: %s', faims_set)
 
     data_start_id = 0
     data_cur_id = 0
@@ -26,7 +25,7 @@ def process_file(args):
     for faims_val in faims_set:
 
         if len(faims_set) > 1:
-            print('Spectra analysis for CV = %.3f' % (faims_val, ))
+            logger.info('Spectra analysis for CV = %.3f', faims_val)
 
         data_for_analyse_tmp = []
         for z in data_for_analyse:
@@ -58,7 +57,7 @@ def process_file(args):
 
         hills_dict = utils.process_hills(hills_dict, data_for_analyse_tmp, mz_step, paseftol, args)
 
-        print('Detected number of hills: %d' % (len(set(hills_dict['hills_idx_array'])), ))
+        logger.info('Detected number of hills: %d', len(set(hills_dict['hills_idx_array'])))
 
         isotopes_mass_accuracy = args['itol']
 
@@ -77,19 +76,20 @@ def process_file(args):
                 0.0107)
             int_arr_norm = int_arr / int_arr.sum()
             a[i] = int_arr_norm
-        
+
         min_charge = args['cmin']
         max_charge = args['cmax']
 
+
         ready = get_initial_isotopes(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val)
 
-        print('Number of potential isotope clusters: ', len(ready))
+        logger.info('Number of potential isotope clusters: %d', len(ready))
 
         negative_mode = args['nm']
 
         isotopes_mass_error_map = {}
         for ic in range(1, 10, 1):
-            isotopes_mass_error_map[ic] = []            
+            isotopes_mass_error_map[ic] = []
 
         for i in range(9):
             tmp = []
@@ -98,7 +98,7 @@ def process_file(args):
                 if len(isotopes) >= i + 1:
                     tmp.append(isotopes[i]['mass_diff_ppm'])
             isotopes_mass_error_map[i+1] = tmp
-                    
+
         for ic in range(1, 10, 1):
             if ic == 1:
 
@@ -130,8 +130,8 @@ def process_file(args):
                 isotopes_mass_error_map[ic] = deepcopy(isotopes_mass_error_map[ic-1])
                 isotopes_mass_error_map[ic][0] = isotopes_mass_error_map[ic][0] - 0.45
 
-        print('Average mass shift between monoisotopic and first 13C isotope: %.3f ppm' % (isotopes_mass_error_map[1][0]))
-        print('Average mass std between monoisotopic and first 13C isotope: %.3f ppm' % (isotopes_mass_error_map[1][1]))
+        logger.info('Average mass shift between monoisotopic and first 13C isotope: %.3f ppm', isotopes_mass_error_map[1][0])
+        logger.info('Average mass std between monoisotopic and first 13C isotope: %.3f ppm', isotopes_mass_error_map[1][1])
 
 
         max_l = len(ready)
@@ -139,9 +139,9 @@ def process_file(args):
 
         while cur_l < max_l:
             pep_feature = ready[cur_l]
-                
+
             tmp = []
-            
+
             for cand in pep_feature['isotopes']:
                 map_val = isotopes_mass_error_map[cand['isotope_number']]
                 if abs(cand['mass_diff_ppm'] - map_val[0]) <= 5 * map_val[1]:
@@ -162,13 +162,13 @@ def process_file(args):
                     ready[cur_l]['isotopes'] = tmp
                     ready[cur_l]['nIsotopes'] = tmp_n_isotopes + 1
                     ready[cur_l]['intensity_array_for_cos_corr'] = [all_theoretical_int, all_exp_intensity]
-                
+
                 else:
                     del ready[cur_l]
                     max_l -= 1
                     cur_l -= 1
-                
-                
+
+
             else:
                 del ready[cur_l]
                 max_l -= 1
@@ -176,7 +176,7 @@ def process_file(args):
 
             cur_l += 1
 
-        print('Number of potential isotope clusters after smart mass accuracy for isotopes: ', len(ready))
+        logger.info('Number of potential isotope clusters after smart mass accuracy for isotopes: %d', len(ready))
 
         max_l = len(ready)
         cur_l = 0
@@ -199,7 +199,7 @@ def process_file(args):
                 ready = sorted(ready, key=func_for_sort)
                 cur_isotopes = n_iso
                 cur_l = 0
-                
+
             if pep_feature['monoisotope hill idx'] not in ready_set:
                 if not any(cand['isotope_hill_idx'] in ready_set for cand in pep_feature['isotopes']):
                     ready_final.append(pep_feature)
@@ -212,7 +212,7 @@ def process_file(args):
 
                 else:
                     tmp = []
-                    
+
                     for cand in pep_feature['isotopes']:
                         if cand['isotope_hill_idx'] not in ready_set:
                             tmp.append(cand)
@@ -232,13 +232,13 @@ def process_file(args):
                             ready[cur_l]['isotopes'] = tmp
                             ready[cur_l]['nIsotopes'] = tmp_n_isotopes + 1
                             ready[cur_l]['intensity_array_for_cos_corr'] = [all_theoretical_int, all_exp_intensity]
-                        
+
                         else:
                             del ready[cur_l]
                             max_l -= 1
                             cur_l -= 1
-                        
-                        
+
+
                     else:
                         del ready[cur_l]
                         max_l -= 1
@@ -250,21 +250,13 @@ def process_file(args):
 
             cur_l += 1
 
-        print('Number of detected isotope clusters: ', len(ready_final))
+        logger.info('Number of detected isotope clusters: %d', len(ready_final))
 
 
-        
         peptide_features = utils.calc_peptide_features(hills_dict, ready_final, negative_mode, faims_val, RT_dict, data_start_id)
 
         utils.write_output(peptide_features, args, write_header)
 
         write_header = False
 
-
-
         data_start_id += len(data_for_analyse_tmp)
-
-        # break
-
-
-
