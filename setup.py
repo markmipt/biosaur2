@@ -3,7 +3,7 @@
 '''
 setup.py file for biosaur2
 '''
-
+import os
 from setuptools import setup, find_packages, Extension
 
 version = open('VERSION').readline().strip()
