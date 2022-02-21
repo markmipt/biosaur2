@@ -4,6 +4,8 @@ from collections import defaultdict, Counter
 from os import path
 import math
 from scipy.optimize import curve_fit
+import logging
+logger = logging.getLogger(__name__)
 from .cutils import get_fast_dict
 
 class MS1OnlyMzML(mzml.MzML): 
@@ -24,6 +26,7 @@ def calibrate_mass(bwidth, mass_left, mass_right, true_md):
     popt, pcov = curve_fit(noisygaus, b1, H1, p0=[1, np.median(true_md), 1, 1])
     mass_shift, mass_sigma = popt[1], abs(popt[2])
     return mass_shift, mass_sigma, pcov[0][0]
+
 
 def calc_peptide_features(hills_dict, peptide_features, negative_mode, faims_val, RT_dict, data_start_id):
 
@@ -115,7 +118,7 @@ def process_hills(hills_dict, data_for_analyse_tmp, mz_step, paseftol, args, dia
         if paseftol is not False:
             hills_dict['hills_im_median'] = []
             hills_dict['hills_im_median_fast_dict'] = defaultdict(set)
-            
+
         hills_dict['hills_intensity_array'] = []
         hills_dict['hills_scan_sets'] = []
         hills_dict['hills_scan_lists'] = []
@@ -214,8 +217,8 @@ def centroid_pasef_data(data_for_analyse_tmp, args, mz_step):
     cnt_ms1_scans = len(data_for_analyse_tmp)
     for spec_idx, z in enumerate(data_for_analyse_tmp):
 
-        print('PASEF scans analysis: %d/%d' % (spec_idx+1, cnt_ms1_scans))
-        print('number of m/z peaks in scan: %d' % (len(z['m/z array'])))
+        logger.info('PASEF scans analysis: %d/%d', spec_idx+1, cnt_ms1_scans)
+        logger.info('number of m/z peaks in scan: %d', len(z['m/z array']))
 
         if 'ignore_ion_mobility' not in z:
 
@@ -233,10 +236,6 @@ def centroid_pasef_data(data_for_analyse_tmp, args, mz_step):
             ion_mobility_ar_fast = (ion_mobility_ar/ion_mobility_step).astype(int)
             mz_ar_fast = (mz_ar/mz_step).astype(int)
 
-            max_mz_int = max(mz_ar_fast) * 2
-
-            # print('HERE1')
-
             idx = np.argsort(mz_ar_fast)
             mz_ar_fast = mz_ar_fast[idx]
             ion_mobility_ar_fast = ion_mobility_ar_fast[idx]
@@ -245,14 +244,8 @@ def centroid_pasef_data(data_for_analyse_tmp, args, mz_step):
             intensity_ar = intensity_ar[idx]
             ion_mobility_ar = ion_mobility_ar[idx]
 
-            idx_ar = list(range(len(mz_ar)))
-
-            # print('HERE2')
-
-            # for peak_idx in idx_ar:
-
             max_peak_idx = len(mz_ar)
-            
+
             peak_idx = 0
             while peak_idx < max_peak_idx:
 
@@ -307,16 +300,15 @@ def centroid_pasef_data(data_for_analyse_tmp, args, mz_step):
                     ion_mobility_ar_new.append(ion_mob_new)
 
                 peak_idx += 1
-            
+
             data_for_analyse_tmp[spec_idx]['m/z array'] = np.array(mz_ar_new)
             data_for_analyse_tmp[spec_idx]['intensity array'] = np.array(intensity_ar_new)
             data_for_analyse_tmp[spec_idx]['mean inverse reduced ion mobility array'] = np.array(ion_mobility_ar_new)
 
-        print('number of m/z peaks in scan after centroiding: %d' % (len(data_for_analyse_tmp[spec_idx]['m/z array'])))
-        print('\n')
+        logger.info('number of m/z peaks in scan after centroiding: %d', len(data_for_analyse_tmp[spec_idx]['m/z array']))
 
     data_for_analyse_tmp = [z for z in data_for_analyse_tmp if len(z['m/z array'] > 0)]
-    print('Number of MS1 scans after combining ion mobility peaks: ', len(data_for_analyse_tmp))
+    logger.info('Number of MS1 scans after combining ion mobility peaks: %d', len(data_for_analyse_tmp))
 
             # fast_dict = defaultdict(set)
             # for peak_idx, (mz_val_int, ion_mob_val_int) in enumerate(zip(mz_ar_fast, ion_mobility_ar_fast)):
@@ -342,7 +334,7 @@ def centroid_pasef_data(data_for_analyse_tmp, args, mz_step):
     #             hill_length.append(len(fast_dict[(mz_val_int, ion_mob_val_int)]))
     #             peak_idx_array.append(peak_idx)
     #         peak_idx_array = np.array(peak_idx_array)
-        
+
 
     #         print('HERE3')
 
@@ -355,7 +347,7 @@ def centroid_pasef_data(data_for_analyse_tmp, args, mz_step):
     #                 all_idx = set([p_id for p_id in fast_dict[(mz_val_int, ion_mob_val_int)] if p_id not in added_idx])
     #                 if len(all_idx):
     #                     added_idx.update(all_idx)
-            
+
     #                     all_intensity = [intensity_ar[p_id] for p_id in all_idx]
     #                     i_val_new = sum(all_intensity)
 
@@ -370,14 +362,14 @@ def centroid_pasef_data(data_for_analyse_tmp, args, mz_step):
     #                         intensity_ar_new.append(i_val_new)
     #                         mz_ar_new.append(mz_val_new)
     #                         ion_mobility_ar_new.append(ion_mob_new)
-            
+
     #         data_for_analyse_tmp[spec_idx]['m/z array'] = np.array(mz_ar_new)
     #         data_for_analyse_tmp[spec_idx]['intensity array'] = np.array(intensity_ar_new)
     #         data_for_analyse_tmp[spec_idx]['mean inverse reduced ion mobility array'] = np.array(ion_mobility_ar_new)
 
     # data_for_analyse_tmp = [z for z in data_for_analyse_tmp if len(z['m/z array'] > 0)]
     # print('Number of MS1 scans after combining ion mobility peaks: ', len(data_for_analyse_tmp))
-        
+
     return data_for_analyse_tmp
 
 def detect_hills(data_for_analyse_tmp, args, mz_step, paseftol, dia=False):
@@ -474,10 +466,10 @@ def detect_hills(data_for_analyse_tmp, args, mz_step, paseftol, dia=False):
                 # best_active_mass_diff = 1e6
                 # best_active_flag = False
 
-                best_mass_diff = 1e6
                 best_intensity = 0
                 best_idx_prev = False
                 mz_cur = z['m/z array'][idx]
+
 
                 all_prevs = [[idx_prev, data_for_analyse_tmp[spec_idx-1]['intensity array'][idx_prev]] for idx_prev in all_idx if idx_prev not in banned_prev_idx_set and (paseftol is False or idx_prev in prev_fast_dict_im[fi])]
                 # print(all_prevs[:2])
@@ -500,7 +492,7 @@ def detect_hills(data_for_analyse_tmp, args, mz_step, paseftol, dia=False):
                         best_intensity = cur_intensity
                         best_idx_prev = idx_prev
                         hills_dict['hills_idx_array'][last_idx+1+idx] = hills_dict['hills_idx_array'][prev_idx+1+idx_prev]
-                        # break
+                        
                 if best_idx_prev is not False:
                     banned_prev_idx_set.add(best_idx_prev)
                     spec_mean_mass_accuracy.append(best_mass_diff)
@@ -553,9 +545,10 @@ def detect_hills(data_for_analyse_tmp, args, mz_step, paseftol, dia=False):
         #     # print(prev_median_error, ', median ppm')
         #     # break
 
+    logger.debug(last_idx)
+    logger.debug(len(hills_dict['hills_idx_array']))
+    logger.debug(len(set(hills_dict['hills_idx_array'])))
 
-    print(len(hills_dict['hills_idx_array']))
-    print(len(set(hills_dict['hills_idx_array'])))
 
     return hills_dict#hills_idx_array, orig_idx_array, scan_idx_array, mzs_array, intensity_array
 
@@ -610,8 +603,8 @@ def process_mzml(args):
                 skipped += 1
 
 
-    print('Number of MS1 scans: ' + str(len(data_for_analyse)))
-    print('Number of skipped MS1 scans: ' + str(skipped))
+    logger.info('Number of MS1 scans: %d', len(data_for_analyse))
+    logger.info('Number of skipped MS1 scans: %d', skipped)
 
     if len(data_for_analyse) == 0:
         raise Exception('no MS1 scans in input file')
@@ -673,7 +666,7 @@ def process_mzml_dia(args):
                 skipped += 1
 
 
-    print('Number of MS2 scans: ' + str(len(data_for_analyse)))
-    print('Number of skipped MS2 scans: ' + str(skipped))
+    logger.info('Number of MS2 scans: %d', len(data_for_analyse))
+    logger.info('Number of skipped MS2 scans: %d', skipped)
 
     return data_for_analyse
