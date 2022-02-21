@@ -1,1 +1,3 @@
 include requirements.txt
+include VERSION
+include biosaur2/cutils.pyx
