@@ -37,6 +37,7 @@ def run():
     # parser.add_argument('-mc', help='number of missed cleavages', default=0, type=int)
     parser.add_argument('-cmin', help='min charge', default=1, type=int)
     parser.add_argument('-cmax', help='max charge', default=6, type=int)
+    parser.add_argument('-nprocs', help='number of processes', default=4, type=int)
     # parser.add_argument('-fmods', help='fixed modifications. in mass1@aminoacid1,mass2@aminoacid2 format', default='57.021464@C')
     # parser.add_argument('-ad', help='add decoy', default=0, type=int)
     # parser.add_argument('-ml', help='use machine learning for PFMs', default=1, type=int)
@@ -61,15 +62,16 @@ def run():
 
     for filename in args['files']:
         logger.info('Starting file: %s', filename)
-        try:
+        if 1:
             args['file'] = filename
             main.process_file(deepcopy(args))
             logger.info('Feature detection is finished for file: %s', filename)
             if args['dia']:
                 main_dia.process_file(deepcopy(args))
-        except Exception as e:
-            logger.error(e)
-            logger.error('Feature detection failed for file: %s', filename)
+        
+        # except Exception as e:
+        #     logger.error(e)
+        #     logger.error('Feature detection failed for file: %s', filename)
 
 if __name__ == '__main__':
     run()

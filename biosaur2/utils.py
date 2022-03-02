@@ -6,7 +6,7 @@ import math
 from scipy.optimize import curve_fit
 import logging
 logger = logging.getLogger(__name__)
-from .cutils import get_fast_dict
+from .cutils import get_fast_dict, get_and_calc_apex_intensity_and_scan
 
 class MS1OnlyMzML(mzml.MzML): 
      _default_iter_path = '//spectrum[./*[local-name()="cvParam" and @name="ms level" and @value="1"]]' 
@@ -37,11 +37,15 @@ def calc_peptide_features(hills_dict, peptide_features, negative_mode, faims_val
 
         pep_feature['massCalib'] = pep_feature['mz'] * pep_feature['charge'] - 1.0072765 * pep_feature['charge'] * (-1 if negative_mode else 1)
 
+        hills_dict, _, _ = get_and_calc_apex_intensity_and_scan(hills_dict, pep_feature['monoisotope idx'])
+
         pep_feature['scanApex'] = hills_dict['hills_scan_apex'][pep_feature['monoisotope idx']]
         pep_feature['rtApex'] = RT_dict[hills_dict['hills_scan_apex'][pep_feature['monoisotope idx']]+data_start_id]
         pep_feature['intensityApex'] = hills_dict['hills_intensity_apex'][pep_feature['monoisotope idx']]
         pep_feature['rtStart'] = RT_dict[hills_dict['hills_scan_lists'][pep_feature['monoisotope idx']][0]+data_start_id]
         pep_feature['rtEnd'] = RT_dict[hills_dict['hills_scan_lists'][pep_feature['monoisotope idx']][-1]+data_start_id]
+        pep_feature['mono_hills_scan_lists'] = hills_dict['hills_scan_lists'][pep_feature['monoisotope idx']]
+        pep_feature['mono_hills_intensity_list'] =  hills_dict['hills_intensity_array'][pep_feature['monoisotope idx']]
 
     return peptide_features
 
@@ -85,132 +89,6 @@ def write_output(peptide_features, args, write_header=True):
 
     out_file.close()
 
-def process_hills(hills_dict, data_for_analyse_tmp, mz_step, paseftol, args, dia=False):
-
-    counter_hills_idx = Counter(hills_dict['hills_idx_array'])
-    if dia is False:
-        min_length_hill = args['minlh']
-    else:
-        min_length_hill = args['diaminlh']
-
-    hills_dict['orig_idx_array'] = np.array(hills_dict['orig_idx_array'])
-    hills_dict['scan_idx_array'] = np.array(hills_dict['scan_idx_array'])
-    hills_dict['hills_idx_array'] = np.array(hills_dict['hills_idx_array'])
-
-
-    tmp_hill_length = np.array([counter_hills_idx[hill_idx] for hill_idx in hills_dict['hills_idx_array']])
-    idx_minl = tmp_hill_length >= min_length_hill
-    hills_dict['hills_idx_array'] = hills_dict['hills_idx_array'][idx_minl]
-    hills_dict['scan_idx_array'] = hills_dict['scan_idx_array'][idx_minl]
-    hills_dict['orig_idx_array'] = hills_dict['orig_idx_array'][idx_minl]
-
-    if len(hills_dict['hills_idx_array']):
-
-        idx_sort = np.argsort(hills_dict['hills_idx_array'] + (hills_dict['scan_idx_array'] / (hills_dict['scan_idx_array'].max()+1)))
-        hills_dict['hills_idx_array'] = hills_dict['hills_idx_array'][idx_sort]
-        hills_dict['scan_idx_array'] = hills_dict['scan_idx_array'][idx_sort]
-        hills_dict['orig_idx_array'] = hills_dict['orig_idx_array'][idx_sort]
-
-        # hills_dict['hills_idx_array_unique'] = sorted([hill_idx for hill_idx in set(hills_dict['hills_idx_array']) if counter_hills_idx[hill_idx] >= min_length_hill])
-        hills_dict['hills_idx_array_unique'] = sorted(list(set(hills_dict['hills_idx_array'])))
-        hills_dict['hills_mz_median'] = []
-        hills_dict['hills_mz_median_fast_dict'] = defaultdict(list)
-        if paseftol is not False:
-            hills_dict['hills_im_median'] = []
-            hills_dict['hills_im_median_fast_dict'] = defaultdict(set)
-
-        hills_dict['hills_intensity_array'] = []
-        hills_dict['hills_scan_sets'] = []
-        hills_dict['hills_scan_lists'] = []
-        hills_dict['hills_lengths'] = []
-        hills_dict['tmp_mz_array'] = []
-
-        hills_dict['scan_idx_array'] = list(hills_dict['scan_idx_array'])
-        hills_dict['orig_idx_array'] = list(hills_dict['orig_idx_array'])
-        hills_dict['hills_idx_array'] = list(hills_dict['hills_idx_array'])
-
-        idx_start = 0
-        idx_end = 0
-
-        for idx_1, hill_idx in enumerate(hills_dict['hills_idx_array_unique']):
-
-            hill_length = counter_hills_idx[hill_idx]
-            idx_end = idx_start + hill_length
-
-            if hill_length > 1:
-
-                # idx_end = idx_start + hill_length
-
-                # tmp_idx = hills_dict['hills_idx_array'] == hill_idx
-                # tmp_idx2 = hills_dict['hills_idx_array'] == hill_idx
-
-                # tmp_idx = idx_start
-
-                tmp_scans = hills_dict['scan_idx_array'][idx_start:idx_end]
-                tmp_orig_idx = hills_dict['orig_idx_array'][idx_start:idx_end]
-
-                tmp_intensity = [data_for_analyse_tmp[scan_val]['intensity array'][orig_idx_val] for orig_idx_val, scan_val in zip(tmp_orig_idx, tmp_scans)]
-                # mz_median = np.median([data_for_analyse_tmp[scan_val]['m/z array'][orig_idx_val] for orig_idx_val, scan_val in zip(tmp_orig_idx, tmp_scans)])
-                tmp_mz_array = [data_for_analyse_tmp[scan_val]['m/z array'][orig_idx_val] for orig_idx_val, scan_val in zip(tmp_orig_idx, tmp_scans)]
-                # if hill_length > 2:
-                #     mz_median = np.average(tmp_mz_array, weights=tmp_intensity)
-                # else:
-                mz_median = 0
-                i_sum_tmp = 0
-                for mz_val_tmp, i_val_tmp in zip(tmp_mz_array, tmp_intensity):
-                    mz_median += mz_val_tmp * i_val_tmp
-                    i_sum_tmp += i_val_tmp
-                mz_median = mz_median / i_sum_tmp
-                # mz_median = np.median(tmp_mz_array)
-                if paseftol is not False:
-                    tmp_im_array = [data_for_analyse_tmp[scan_val]['mean inverse reduced ion mobility array'][orig_idx_val] for orig_idx_val, scan_val in zip(tmp_orig_idx, tmp_scans)]
-                    im_median = np.average(tmp_im_array, weights=tmp_intensity)
-                tmp_scans_list = tmp_scans
-                tmp_scans_set = set(tmp_scans)
-
-            else:
-                tmp_mz_array = [hills_dict['mzs_array'][hill_idx], ]
-                mz_median = hills_dict['mzs_array'][hill_idx]
-                if paseftol is not False:
-                    tmp_im_array = [hills_dict['im_array'][hill_idx], ]
-                    im_median = hills_dict['im_array'][hill_idx]
-                tmp_intensity = hills_dict['intensity_array'][hill_idx]
-                # tmp_scans = set([hills_dict['scan_idx_array'][hill_idx], ])
-                tmp_scans_set = hills_dict['scan_idx_array'][hill_idx]
-                tmp_scans_list = tmp_scans_set
-
-            idx_start = idx_end
-
-            hills_dict['hills_mz_median'].append(mz_median)
-
-            mz_median_int = int(mz_median/mz_step)
-            tmp_val = (idx_1, tmp_scans_list[0], tmp_scans_list[-1])
-            hills_dict['hills_mz_median_fast_dict'][mz_median_int-1].append(tmp_val)
-            hills_dict['hills_mz_median_fast_dict'][mz_median_int].append(tmp_val)
-            hills_dict['hills_mz_median_fast_dict'][mz_median_int+1].append(tmp_val)
-
-            if paseftol is not False:
-                hills_dict['hills_im_median'].append(im_median)
-
-                im_median_int = int(im_median/paseftol)
-                hills_dict['hills_im_median_fast_dict'][im_median_int-1].add(idx_1)
-                hills_dict['hills_im_median_fast_dict'][im_median_int].add(idx_1)
-                hills_dict['hills_im_median_fast_dict'][im_median_int+1].add(idx_1)
-
-
-            hills_dict['hills_intensity_array'].append(tmp_intensity)
-            hills_dict['hills_scan_sets'].append(tmp_scans_set)
-            hills_dict['hills_scan_lists'].append(tmp_scans_list)
-            hills_dict['hills_lengths'].append(hill_length)
-            hills_dict['tmp_mz_array'].append(tmp_mz_array)
-
-
-        hills_dict['hills_idict'] = [None] * len(hills_dict['hills_idx_array_unique'])
-        hills_dict['hill_sqrt_of_i'] = [None] * len(hills_dict['hills_idx_array_unique'])
-        hills_dict['hills_intensity_apex'] = [None] * len(hills_dict['hills_idx_array_unique'])
-        hills_dict['hills_scan_apex'] = [None] * len(hills_dict['hills_idx_array_unique'])
-
-    return hills_dict
 
 def centroid_pasef_data(data_for_analyse_tmp, args, mz_step):
 
@@ -371,187 +249,6 @@ def centroid_pasef_data(data_for_analyse_tmp, args, mz_step):
     # print('Number of MS1 scans after combining ion mobility peaks: ', len(data_for_analyse_tmp))
 
     return data_for_analyse_tmp
-
-def detect_hills(data_for_analyse_tmp, args, mz_step, paseftol, dia=False):
-
-    hills_dict = {}
-
-    if dia is False:
-        hill_mass_accuracy = args['htol']
-    else:
-        hill_mass_accuracy = args['diahtol']
-
-    hills_dict['hills_idx_array'] = []
-    hills_dict['orig_idx_array'] = []
-    hills_dict['scan_idx_array'] = []
-    hills_dict['mzs_array'] = []
-    hills_dict['intensity_array'] = []
-    if paseftol is not False:
-        hills_dict['im_array'] = []
-        prev_fast_dict_im = dict()
-
-    # hills_idx_array = []
-    # orig_idx_array = []
-    # scan_idx_array = []
-    # mzs_array = []
-    # intensity_array = []
-
-    last_idx = -1
-    prev_idx = -1
-    prev_fast_dict = dict()
-    # prev_median_error = hill_mass_accuracy / 5
-    # mass_shift = 0
-
-    total_num_hills = []
-    total_mass_diff = []
-
-    for spec_idx, z in enumerate(data_for_analyse_tmp):
-
-        spec_mean_mass_accuracy = []
-
-        # active_masses_array = []
-
-        len_mz = len(z['m/z array'])
-
-        hills_dict['hills_idx_array'].extend(list(range(last_idx+1, last_idx+1+len_mz, 1)))
-        hills_dict['orig_idx_array'].extend(range(len_mz))
-        hills_dict['scan_idx_array'].extend([spec_idx] * len_mz)
-
-        idx_for_sort = np.argsort(z['intensity array'])[::-1]
-
-        mz_sorted = z['m/z array'][idx_for_sort]
-        basic_id_sorted = list(np.array(range(len_mz))[idx_for_sort])
-
-        hills_dict['mzs_array'].extend(z['m/z array'])
-        hills_dict['intensity_array'].extend(z['intensity array'])
-
-        if paseftol is not False:
-            im_sorted = z['mean inverse reduced ion mobility array'][idx_for_sort]
-            hills_dict['im_array'].extend(z['mean inverse reduced ion mobility array'])
-
-            fast_dict_im = defaultdict(set)
-            fast_array_im = (im_sorted/paseftol).astype(int)
-            for idx, fm in zip(basic_id_sorted, fast_array_im):
-                fast_dict_im[fm-1].add(idx)
-                fast_dict_im[fm+1].add(idx)
-                fast_dict_im[fm].add(idx)
-
-        fast_dict, fast_array = get_fast_dict(mz_sorted, mz_step, basic_id_sorted)
-
-        banned_prev_idx_set = set()
-
-        for idx, fm, fi in zip(basic_id_sorted, fast_array, (fast_array if paseftol is False else fast_array_im)):
-
-            flag1 = fm in prev_fast_dict
-            flag2 = fm-1 in prev_fast_dict
-            flag3 = fm+1 in prev_fast_dict
-
-            if flag1 or flag2 or flag3:
-
-                if flag1:
-                    all_idx = prev_fast_dict[fm]
-                    if flag2:
-                        all_idx += prev_fast_dict[fm-1]
-                    if flag3:
-                        all_idx += prev_fast_dict[fm+1]
-                elif flag2:
-                    all_idx = prev_fast_dict[fm-1]
-                    if flag3:
-                        all_idx += prev_fast_dict[fm+1]
-                elif flag3:
-                    all_idx = prev_fast_dict[fm+1]
-
-                # all_idx = prev_fast_dict.get(fm-1, []) + prev_fast_dict.get(fm, []) + prev_fast_dict.get(fm+1, [])
-
-                # best_active_mass_diff = 1e6
-                # best_active_flag = False
-
-                best_intensity = 0
-                best_idx_prev = False
-                mz_cur = z['m/z array'][idx]
-
-
-                all_prevs = [[idx_prev, data_for_analyse_tmp[spec_idx-1]['intensity array'][idx_prev]] for idx_prev in all_idx if idx_prev not in banned_prev_idx_set and (paseftol is False or idx_prev in prev_fast_dict_im[fi])]
-                # print(all_prevs[:2])
-                # all_prevs = sorted(all_prevs, key=lambda x: -x[1])
-                # print(all_prevs[:2])
-                # print('\n')
-                # for idx_prev in prev_fast_dict[fm]:
-                #     if idx_prev not in banned_prev_idx_set and (paseftol is False or idx_prev in prev_fast_dict_im[fi]):
-                for idx_prev, cur_intensity in all_prevs:
-                    cur_mass_diff_with_sign = (mz_cur - data_for_analyse_tmp[spec_idx-1]['m/z array'][idx_prev]) / mz_cur * 1e6
-                    cur_mass_diff = abs(cur_mass_diff_with_sign)
-                    # cur_intensity = data_for_analyse_tmp[spec_idx-1]['intensity array'][idx_prev]
-                    # if cur_mass_diff <= hill_mass_accuracy and cur_mass_diff <= best_mass_diff:
-                    if cur_mass_diff <= hill_mass_accuracy and cur_intensity >= best_intensity:
-                    # if cur_mass_diff <= (prev_median_error * 5) and cur_intensity >= best_intensity:
-                    # if abs(cur_mass_diff_with_sign - mass_shift) <= (prev_median_error * 5) and cur_intensity >= best_intensity:
-                        # best_active_flag = True
-                        best_mass_diff = cur_mass_diff
-                        # best_active_mass_diff = cur_mass_diff_with_sign
-                        best_intensity = cur_intensity
-                        best_idx_prev = idx_prev
-                        hills_dict['hills_idx_array'][last_idx+1+idx] = hills_dict['hills_idx_array'][prev_idx+1+idx_prev]
-                        
-                if best_idx_prev is not False:
-                    banned_prev_idx_set.add(best_idx_prev)
-                    spec_mean_mass_accuracy.append(best_mass_diff)
-                # if best_active_flag:
-                #     active_masses_array.append(best_active_mass_diff)
-
-
-                    # cur_mass_diff = (mz_cur - data_for_analyse_tmp[spec_idx-1]['m/z array'][idx_prev]) / mz_cur * 1e6
-                    # # cur_mass_diff_norm = abs(cur_mass_diff) * (1 if cur_mass_diff < 0 else 2)
-                    # if -hill_mass_accuracy - 2.5 <= cur_mass_diff <= hill_mass_accuracy and abs(cur_mass_diff) <= best_mass_diff:
-                    #     best_mass_diff = abs(cur_mass_diff)
-                    #     # hills_dict['hills_idx_array'][last_idx+1+idx] = prev_idx + 1 + idx_prev
-                    #     hills_dict['hills_idx_array'][last_idx+1+idx] = hills_dict['hills_idx_array'][prev_idx+1+idx_prev]
-
-        # print(np.mean(spec_mean_mass_accuracy), len(spec_mean_mass_accuracy))
-        total_num_hills.append(len(spec_mean_mass_accuracy))
-        if len(spec_mean_mass_accuracy) == 0:
-            total_mass_diff.append(0)
-        else:
-            total_mass_diff.append(np.mean(spec_mean_mass_accuracy))
-
-        prev_fast_dict = fast_dict
-        if paseftol is not False:
-            prev_fast_dict_im = fast_dict_im
-        prev_idx = last_idx
-        last_idx = last_idx+len_mz
-
-        # if len(active_masses_array) > 100:
-        #     # prev_median_error = np.median(active_masses_array)
-
-        #     true_md = np.array(active_masses_array)
-
-        #     mass_left = -min(true_md)
-        #     mass_right = max(true_md)
-
-
-        #     try:
-        #         mass_shift, mass_sigma, covvalue = calibrate_mass(0.05, mass_left, mass_right, true_md)
-        #     except:
-        #         mass_shift = 0
-        #         mass_sigma = np.median(active_masses_array)
-        #     #     mass_shift, mass_sigma, covvalue = calibrate_mass(0.25, mass_left, mass_right, true_md)
-        #     # if np.isinf(covvalue):
-        #     #     mass_shift = 0
-        #     #     mass_sigma = np.median(active_masses_array)
-        #         # mass_shift, mass_sigma, covvalue = calibrate_mass(0.05, mass_left, mass_right, true_md)
-
-        #     print(mass_shift, mass_sigma, ', median ppm', len(active_masses_array))
-        #     prev_median_error = mass_sigma
-        #     # print(prev_median_error, ', median ppm')
-        #     # break
-
-    logger.debug(last_idx)
-    logger.debug(len(hills_dict['hills_idx_array']))
-    logger.debug(len(set(hills_dict['hills_idx_array'])))
-
-
-    return hills_dict#hills_idx_array, orig_idx_array, scan_idx_array, mzs_array, intensity_array
-
 
 def process_mzml(args):
 
