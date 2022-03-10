@@ -19,7 +19,7 @@ def split_peaks_multi(hills_dict, data_for_analyse_tmp, args):
 
     hillValleyFactor = args['hvf']
     min_length_hill = args['minlh']
-    min_length_hill = max(2, min_length_hill)
+    # min_length_hill = max(2, min_length_hill)
 
 
     hills_dict['orig_idx_array'] = np.array(hills_dict['orig_idx_array'])

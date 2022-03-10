@@ -136,7 +136,7 @@ def get_initial_isotopes(dict hills_dict, float isotopes_mass_accuracy, list iso
 
                             if abs(mass_diff_abs) <= mz_tol:
                                 hill_scans_2 = hills_dict['hills_scan_sets'][idx_2]
-                                if len(hill_scans_1.intersection(hill_scans_2)) >= 2:
+                                if len(hill_scans_1.intersection(hill_scans_2)) >= 1:
 
 
                                     hills_dict, hill_idict_1, hill_sqrt_of_i_1 = get_and_calc_values_for_cos_corr(hills_dict, idx_1)
@@ -668,34 +668,22 @@ def process_hills(dict hills_dict, list data_for_analyse_tmp, float mz_step, bin
             hill_length = counter_hills_idx[hill_idx]
             idx_end = idx_start + hill_length
 
-            if hill_length > 1:
+            tmp_scans = hills_dict['scan_idx_array'][idx_start:idx_end]
+            tmp_orig_idx = hills_dict['orig_idx_array'][idx_start:idx_end]
 
-                tmp_scans = hills_dict['scan_idx_array'][idx_start:idx_end]
-                tmp_orig_idx = hills_dict['orig_idx_array'][idx_start:idx_end]
-
-                tmp_intensity = [data_for_analyse_tmp[scan_val]['intensity array'][orig_idx_val] for orig_idx_val, scan_val in zip(tmp_orig_idx, tmp_scans)]
-                tmp_mz_array = [data_for_analyse_tmp[scan_val]['m/z array'][orig_idx_val] for orig_idx_val, scan_val in zip(tmp_orig_idx, tmp_scans)]
-                mz_median = 0
-                i_sum_tmp = 0
-                for mz_val_tmp, i_val_tmp in zip(tmp_mz_array, tmp_intensity):
-                    mz_median += mz_val_tmp * i_val_tmp
-                    i_sum_tmp += i_val_tmp
-                mz_median = mz_median / i_sum_tmp
-                if paseftol is not False:
-                    tmp_im_array = [data_for_analyse_tmp[scan_val]['mean inverse reduced ion mobility array'][orig_idx_val] for orig_idx_val, scan_val in zip(tmp_orig_idx, tmp_scans)]
-                    im_median = np.average(tmp_im_array, weights=tmp_intensity)
-                tmp_scans_list = tmp_scans
-                tmp_scans_set = set(tmp_scans)
-
-            else:
-                tmp_mz_array = [hills_dict['mzs_array'][hill_idx], ]
-                mz_median = hills_dict['mzs_array'][hill_idx]
-                if paseftol is not False:
-                    tmp_im_array = [hills_dict['im_array'][hill_idx], ]
-                    im_median = hills_dict['im_array'][hill_idx]
-                tmp_intensity = hills_dict['intensity_array'][hill_idx]
-                tmp_scans_set = hills_dict['scan_idx_array'][hill_idx]
-                tmp_scans_list = tmp_scans_set
+            tmp_intensity = [data_for_analyse_tmp[scan_val]['intensity array'][orig_idx_val] for orig_idx_val, scan_val in zip(tmp_orig_idx, tmp_scans)]
+            tmp_mz_array = [data_for_analyse_tmp[scan_val]['m/z array'][orig_idx_val] for orig_idx_val, scan_val in zip(tmp_orig_idx, tmp_scans)]
+            mz_median = 0
+            i_sum_tmp = 0
+            for mz_val_tmp, i_val_tmp in zip(tmp_mz_array, tmp_intensity):
+                mz_median += mz_val_tmp * i_val_tmp
+                i_sum_tmp += i_val_tmp
+            mz_median = mz_median / i_sum_tmp
+            if paseftol is not False:
+                tmp_im_array = [data_for_analyse_tmp[scan_val]['mean inverse reduced ion mobility array'][orig_idx_val] for orig_idx_val, scan_val in zip(tmp_orig_idx, tmp_scans)]
+                im_median = np.average(tmp_im_array, weights=tmp_intensity)
+            tmp_scans_list = tmp_scans
+            tmp_scans_set = set(tmp_scans)
 
             idx_start = idx_end
 
