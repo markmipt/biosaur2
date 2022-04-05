@@ -544,12 +544,7 @@ def detect_hills(list data_for_analyse_tmp, dict args, float mz_step, bint pasef
             im_sorted = z['mean inverse reduced ion mobility array'][idx_for_sort]
             hills_dict['im_array'].extend(z['mean inverse reduced ion mobility array'])
 
-            fast_dict_im = dict()
-            fast_array_im = (im_sorted/paseftol).astype(int)
-            for idx, fm in zip(basic_id_sorted, fast_array_im):
-                fast_dict_im[fm-1].add(idx)
-                fast_dict_im[fm+1].add(idx)
-                fast_dict_im[fm].add(idx)
+            fast_dict_im, fast_array_im = get_fast_dict(im_sorted, paseftol, basic_id_sorted)
 
         fast_dict, fast_array = get_fast_dict(mz_sorted, mz_step, basic_id_sorted)
 

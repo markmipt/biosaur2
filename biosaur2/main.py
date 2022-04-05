@@ -7,7 +7,7 @@ import logging
 logger = logging.getLogger(__name__)
 from .cutils import get_initial_isotopes, checking_cos_correlation_for_carbon, split_peaks, split_peaks_old, detect_hills, process_hills
 from multiprocessing import Queue, Process, cpu_count
-from collections import Counter
+from collections import Counter, defaultdict
 
 def split_peaks_python(qout, hills_dict, data_for_analyse_tmp, args, counter_hills_idx, sorted_idx_child_process, sorted_idx_array_child_process, i, checked_id):
 
@@ -144,6 +144,14 @@ def process_file(args):
             max_mz_value = max(max_mz_value, z['m/z array'].max())
 
         mz_step = hill_mass_accuracy * 1e-6 * max_mz_value
+
+        #Process TOF
+        if args['tof']:
+            data_for_analyse_tmp = utils.process_tof(data_for_analyse_tmp)
+
+        #Process profile
+        if args['profile']:
+            data_for_analyse_tmp = utils.process_profile(data_for_analyse_tmp)
 
         #Process ion mobility
 
@@ -282,6 +290,10 @@ def process_file(args):
                     ready[cur_l]['isotopes'] = tmp
                     ready[cur_l]['nIsotopes'] = tmp_n_isotopes + 1
                     ready[cur_l]['intensity_array_for_cos_corr'] = [all_theoretical_int, all_exp_intensity]
+                    # ready[cur_l]['sumI'] = np.log10(sum(all_exp_intensity))
+                    # ready[cur_l]['mass_diff_ppm_abs'] = abs(ready[cur_l]['isotopes'][0]['mass_diff_ppm'])
+
+                    
 
                 else:
                     del ready[cur_l]
@@ -302,9 +314,11 @@ def process_file(args):
         cur_l = 0
 
         func_for_sort = lambda x: -x['nIsotopes']-x['cos_cor_isotopes']
+        # func_for_sort = lambda x: -x['nIsotopes']*1e6+x['mass_diff_ppm_abs']
 
         ready_final = []
         ready_set = set()
+        # ready_set = defaultdict(int)
         ready = sorted(ready, key=func_for_sort)
         cur_isotopes = ready[0]['nIsotopes']
 
@@ -322,10 +336,13 @@ def process_file(args):
 
             if pep_feature['monoisotope hill idx'] not in ready_set:
                 if not any(cand['isotope_hill_idx'] in ready_set for cand in pep_feature['isotopes']):
+                # if not any(ready_set[cand['isotope_hill_idx']]>1 for cand in pep_feature['isotopes']):
                     ready_final.append(pep_feature)
                     ready_set.add(pep_feature['monoisotope hill idx'])
+                    # ready_set[pep_feature['monoisotope hill idx']] += 1
                     for cand in pep_feature['isotopes']:
                         ready_set.add(cand['isotope_hill_idx'])
+                        # ready_set[cand['isotope_hill_idx']] += 1
                     del ready[cur_l]
                     max_l -= 1
                     cur_l -= 1
@@ -335,6 +352,7 @@ def process_file(args):
 
                     for cand in pep_feature['isotopes']:
                         if cand['isotope_hill_idx'] not in ready_set:
+                        # if ready_set[cand['isotope_hill_idx']] <= 1:
                             tmp.append(cand)
                         else:
                             break
@@ -352,6 +370,8 @@ def process_file(args):
                             ready[cur_l]['isotopes'] = tmp
                             ready[cur_l]['nIsotopes'] = tmp_n_isotopes + 1
                             ready[cur_l]['intensity_array_for_cos_corr'] = [all_theoretical_int, all_exp_intensity]
+                            # ready[cur_l]['sumI'] = np.log10(sum(all_exp_intensity))
+                            # ready[cur_l]['mass_diff_ppm_abs'] = abs(ready[cur_l]['isotopes'][0]['mass_diff_ppm'])
 
                         else:
                             del ready[cur_l]

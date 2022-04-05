@@ -29,6 +29,7 @@ def run():
     # parser.add_argument('-fdr', help='protein fdr filter in %%', default=1.0, type=float)
     # parser.add_argument('-i', help='minimum number of isotopes', default=2, type=int)
     parser.add_argument('-minlh', help='minimum length for hill', default=2, type=int)
+    parser.add_argument('-pasefminlh', help='minimum length for pasef hill', default=1, type=int)
     # parser.add_argument('-ts', help='Two-stage RT training: 0 - turn off, 1 - turn one, 2 - turn on and use additive model in the first stage (Default)', default=2, type=int)
     # parser.add_argument('-sc', help='minimum number of scans for peptide feature', default=3, type=int)
     # parser.add_argument('-lmin', help='min length of peptides', default=7, type=int)
@@ -52,6 +53,8 @@ def run():
     parser.add_argument('-diaminlh', help='minimum length for dia hill', default=1, type=int)
     parser.add_argument('-mgf', help='path to output mgf file', default='')
     parser.add_argument('-debug', help='log debugging information', action='store_true')
+    parser.add_argument('-tof', help='smart tof processing', action='store_true')
+    parser.add_argument('-profile', help='profile processing', action='store_true')
     # parser.add_argument('-diaitol', help='mass accuracy for DIA isotopes in ppm', default=25, type=float)
     args = vars(parser.parse_args())
     logging.basicConfig(format='%(levelname)9s: %(asctime)s %(message)s',
