@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    name: Publish for ${{ matrix.os }}
+    name: Build wheels for ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -35,6 +35,9 @@ jobs:
 
 
   publish:
+    name: Upload to PyPI
+    runs-on: ubuntu-20.04
+    steps:
     - name: Download artifacts
       uses: actions/download-artifact@v3
       with:
