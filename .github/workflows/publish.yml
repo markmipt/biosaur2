@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 jobs:
-  publish:
+  build:
     name: Publish for ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -27,11 +27,25 @@ jobs:
         tag: ${{ github.ref }}
         overwrite: false
         file_glob: true
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.os }}-artifact
+        path: "wheelhouse/*.whl"
+
+
+  publish:
+    - name: Download artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: dist
+
+    - run : ls -l dist
+
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@v1.5.0
       with:
         user: __token__
         password: ${{ secrets.PYPI_API_TOKEN_BIOSAUR2 }}
-        packages_dir: wheelhouse
         verbose: true
         print_hash: true
