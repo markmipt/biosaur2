@@ -37,6 +37,7 @@ jobs:
   publish:
     name: Upload to PyPI
     runs-on: ubuntu-20.04
+    needs: build
     steps:
     - name: Download artifacts
       uses: actions/download-artifact@v3
