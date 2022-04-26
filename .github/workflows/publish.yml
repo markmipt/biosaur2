@@ -46,6 +46,7 @@ jobs:
     - run : |
         ls -R
         mv -v */*.whl .
+        rmdir ubuntu-20.04 windows-2019
 
 
     - name: Publish to PyPI
