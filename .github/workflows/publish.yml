@@ -35,17 +35,18 @@ jobs:
 
 
   publish:
-    name: Upload ${{ matrix.artname }} wheels to PyPI
+    name: Upload wheels to PyPI
     runs-on: ubuntu-20.04
     needs: build
 
     steps:
     - name: Download artifacts
       uses: actions/download-artifact@v3
-      with:
-        name: ${{ matrix.artname }}
 
-    - run : ls -R
+    - run : |
+        ls -R
+        mv -v */*.whl .
+
 
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@v1.5.0
