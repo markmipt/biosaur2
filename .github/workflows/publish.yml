@@ -38,9 +38,7 @@ jobs:
     name: Upload ${{ matrix.artname }} wheels to PyPI
     runs-on: ubuntu-20.04
     needs: build
-    strategy:
-      matrix:
-        artname: [ubuntu-20.04, windows-2019]
+
     steps:
     - name: Download artifacts
       uses: actions/download-artifact@v3
@@ -56,4 +54,4 @@ jobs:
         password: ${{ secrets.PYPI_API_TOKEN_BIOSAUR2 }}
         verbose: true
         print_hash: true
-        packages_dir: ${{ matrix.artname }}
+        packages_dir: "."
