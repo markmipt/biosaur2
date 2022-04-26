@@ -30,20 +30,24 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v3
       with:
+        name: ${{ matrix.os }}
         path: "wheelhouse/*.whl"
 
 
   publish:
-    name: Upload to PyPI
+    name: Upload ${{ matrix.artname }} wheels to PyPI
     runs-on: ubuntu-20.04
     needs: build
+    strategy:
+      matrix:
+        artname: [ubuntu-20.04, windows-2019]
     steps:
     - name: Download artifacts
       uses: actions/download-artifact@v3
       with:
-        path: dist
+        name: ${{ matrix.artname }}
 
-    - run : ls -l dist
+    - run : ls -R
 
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@v1.5.0
@@ -52,3 +56,4 @@ jobs:
         password: ${{ secrets.PYPI_API_TOKEN_BIOSAUR2 }}
         verbose: true
         print_hash: true
+        packages_dir: ${{ matrix.artname }}
