@@ -11,7 +11,7 @@ The script output contains tsv table with peptide features.
 
 All available arguments can be shown with command "biosaur2 -h".
 
-The default parameter minlh (the minimal number of consecutive scans for peptide feature) is 1 and this value is optimimal for ultra-short LC gradients (a few minutes). For the longer LC gradients, this value can be increased to reduce feature detection time and removing noise isotopic clusters.
+The default parameter minlh (the minimal number of consecutive scans for peptide feature) is 1 and this value is optimimal for ultra-short LC gradients (a few minutes). For the longer LC gradients, this value can be increased for reducing of feature detection time and removing noise isotopic clusters.
 
 For TOF data please add "-tof" argument.
 
