@@ -21,7 +21,7 @@ For negative mode data please add "-nm" argument.
 
 Citing biosaur2
 -------------------
-Abdrakhimov, et al. Biosaur: An open-source Python software for liquid chromatography–mass spectrometry peptide feature detection with ion mobility support. https://doi.org/10.1002/rcm.9045
+Abdrakhimov, et al. Biosaur: An open-source Python software for liquid chromatography-mass spectrometry peptide feature detection with ion mobility support. https://doi.org/10.1002/rcm.9045
 
 Installation
 -------------
