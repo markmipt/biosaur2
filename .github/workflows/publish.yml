@@ -43,11 +43,18 @@ jobs:
     - name: Download artifacts
       uses: actions/download-artifact@v3
 
-    - run : |
+    - name: Move wheel files
+      run : |
         ls -R
         mv -v */*.whl .
         rmdir ubuntu-20.04 windows-2019
 
+    - uses: actions/checkout@v3
+    - uses: actions/setup-python@v3
+    - run : |
+        python setup.py sdist
+        mv dist/*.tar.gz .
+        rmdir dist
 
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@v1.5.0
