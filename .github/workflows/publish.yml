@@ -45,17 +45,15 @@ jobs:
 
     - name: Move wheel files
       run : |
+        mkdir -p dist
         ls -R
-        mv -v */*.whl .
-        rmdir ubuntu-20.04 windows-2019
+        mv -v */*.whl dist/
 
     - uses: actions/checkout@v3
     - uses: actions/setup-python@v3
     - run : |
         pip install -r requirements.txt
         python setup.py sdist
-        mv -v dist/*.tar.gz .
-        rmdir dist
 
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@v1.5.0
@@ -64,4 +62,4 @@ jobs:
         password: ${{ secrets.PYPI_API_TOKEN_BIOSAUR2 }}
         verbose: true
         print_hash: true
-        packages_dir: "."
+        packages_dir: "dist"
