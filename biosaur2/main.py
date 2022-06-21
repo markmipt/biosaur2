@@ -158,7 +158,7 @@ def process_file(args):
         if all('ignore_ion_mobility' not in z for z in data_for_analyse_tmp):
             utils.centroid_pasef_data(data_for_analyse_tmp, args, mz_step)
         else:
-            args['paseftol'] = False
+            args['paseftol'] = 0
 
         paseftol = args['paseftol']
 
@@ -166,6 +166,7 @@ def process_file(args):
 
         hills_dict = split_peaks_multi(hills_dict, data_for_analyse_tmp, args)
         hills_dict = process_hills(hills_dict, data_for_analyse_tmp, mz_step, paseftol, args)
+
         logger.info('Detected number of hills: %d', len(set(hills_dict['hills_idx_array'])))
 
         isotopes_mass_accuracy = args['itol']
@@ -176,7 +177,7 @@ def process_file(args):
         averagine_C = 4.9384
         a = dict()
 
-        for i in range(100, 20000, 100):
+        for i in range(0, 20000, 100):
             int_arr = binom.pmf(
                 isotopes_list,
                 float(i) /
@@ -290,6 +291,10 @@ def process_file(args):
                     ready[cur_l]['isotopes'] = tmp
                     ready[cur_l]['nIsotopes'] = tmp_n_isotopes + 1
                     ready[cur_l]['intensity_array_for_cos_corr'] = [all_theoretical_int, all_exp_intensity]
+                    # tmp_list = [hills_dict['hills_lengths'][pep_feature['monoisotope idx']], ] + [hills_dict['hills_lengths'][cand['isotope_idx']] for cand in pep_feature['isotopes']]
+
+                    # ready[cur_l]['isoScans'] = np.mean(tmp_list)
+                    # ready[cur_l]['isoScans_std'] = np.std(tmp_list) / ready[cur_l]['isoScans']
                     # ready[cur_l]['sumI'] = np.log10(sum(all_exp_intensity))
                     # ready[cur_l]['mass_diff_ppm_abs'] = abs(ready[cur_l]['isotopes'][0]['mass_diff_ppm'])
 
@@ -314,6 +319,7 @@ def process_file(args):
         cur_l = 0
 
         func_for_sort = lambda x: -x['nIsotopes']-x['cos_cor_isotopes']
+        # func_for_sort = lambda x: -x['nIsotopes']+x['isoScans_std']
         # func_for_sort = lambda x: -x['nIsotopes']*1e6+x['mass_diff_ppm_abs']
 
         ready_final = []

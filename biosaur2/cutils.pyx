@@ -83,7 +83,7 @@ def cos_correlation(set hill_scans_1, dict hill_idict_1, float hill_sqrt_of_i_1,
 @cython.cdivision(True)
 @cython.boundscheck(False)
 @cython.wraparound(True)
-def get_initial_isotopes(dict hills_dict, float isotopes_mass_accuracy, list isotopes_list, dict a, int min_charge, int max_charge, float mz_step, bint paseftol, float faims_val, list sorted_idx_child_process):
+def get_initial_isotopes(dict hills_dict, float isotopes_mass_accuracy, list isotopes_list, dict a, int min_charge, int max_charge, float mz_step, float paseftol, float faims_val, list sorted_idx_child_process):
 
     cdef list ready, charges, hill_scans_1_list, hill_scans_2_list, candidates, tmp_candidates
     cdef int idx_1, hill_idx_1, idx_2, hill_idx_2, im_to_check_fast, hill_scans_1_list_first, hill_scans_1_list_last
@@ -103,7 +103,7 @@ def get_initial_isotopes(dict hills_dict, float isotopes_mass_accuracy, list iso
 
     #for (idx_1, hill_idx_1), hill_mz_1 in sorted(list(zip(list(enumerate(hills_dict['hills_idx_array_unique'])), hills_dict['hills_mz_median'])), key=lambda x: x[-1]):
 
-        if paseftol is not False:
+        if paseftol > 0:
             im_mz_1 = hills_dict['hills_im_median'][idx_1]
             im_to_check_fast = int(im_mz_1 / paseftol)
 
@@ -128,7 +128,7 @@ def get_initial_isotopes(dict hills_dict, float isotopes_mass_accuracy, list iso
 
                 for idx_2, hill_scans_2_list_first, hill_scans_2_list_last in hills_dict['hills_mz_median_fast_dict'][m_to_check_fast]:
 
-                    if paseftol is False or idx_2 in hills_dict['hills_im_median_fast_dict'][im_to_check_fast]:
+                    if paseftol == 0 or idx_2 in hills_dict['hills_im_median_fast_dict'][im_to_check_fast]:
 
                         if not hill_scans_1_list_last < hill_scans_2_list_first and not hill_scans_2_list_last < hill_scans_1_list_first:
                             hill_mz_2 = hills_dict['hills_mz_median'][idx_2]
@@ -212,7 +212,7 @@ def get_initial_isotopes(dict hills_dict, float isotopes_mass_accuracy, list iso
                             'nIsotopes': number_of_passed_isotopes,
                             'charge': charge,
                             'FAIMS': faims_val,
-                            'im': 0 if paseftol is False else im_mz_1,
+                            'im': 0 if paseftol == 0 else im_mz_1,
                             'intensity_array_for_cos_corr': [all_theoretical_int[:number_of_passed_isotopes+1], all_exp_intensity[:number_of_passed_isotopes+1]],
                         }
 
@@ -491,15 +491,15 @@ def split_peaks_old(dict hills_dict, list data_for_analyse_tmp, dict args):
 @cython.cdivision(True)
 @cython.boundscheck(False)
 @cython.wraparound(True)
-def detect_hills(list data_for_analyse_tmp, dict args, float mz_step, bint paseftol, bint dia=False):
+def detect_hills(list data_for_analyse_tmp, dict args, float mz_step, float paseftol, bint dia=False):
 
     cdef dict hills_dict, prev_fast_dict, z
-    cdef list total_num_hills, total_mass_diff, spec_mean_mass_accuracy, basic_id_sorted, all_idx, all_prevs
-    cdef set banned_prev_idx_set
+    cdef list total_num_hills, total_mass_diff, spec_mean_mass_accuracy, basic_id_sorted, all_idx, all_idx_im, all_prevs
+    cdef set banned_prev_idx_set, all_idx_im_set
     cdef float hill_mass_accuracy, best_intensity, mz_cur, cur_intensity, cur_mass_diff_with_sign, cur_mass_diff, best_mass_diff
     cdef int last_idx, prev_idx, spec_idx, len_mz, idx, fm, fi, best_idx_prev, idx_prev
     cdef np.ndarray idx_for_sort, mz_sorted, im_sorted
-    cdef bint flag1, flag2, flag3
+    cdef bint flag1, flag2, flag3, flag1_im, flag2_im, flag3_im
 
     hills_dict = {}
 
@@ -513,7 +513,7 @@ def detect_hills(list data_for_analyse_tmp, dict args, float mz_step, bint pasef
     hills_dict['scan_idx_array'] = []
     hills_dict['mzs_array'] = []
     hills_dict['intensity_array'] = []
-    if paseftol is not False:
+    if paseftol > 0:
         hills_dict['im_array'] = []
         prev_fast_dict_im = dict()
 
@@ -540,7 +540,7 @@ def detect_hills(list data_for_analyse_tmp, dict args, float mz_step, bint pasef
         hills_dict['mzs_array'].extend(z['m/z array'])
         hills_dict['intensity_array'].extend(z['intensity array'])
 
-        if paseftol is not False:
+        if paseftol > 0:
             im_sorted = z['mean inverse reduced ion mobility array'][idx_for_sort]
             hills_dict['im_array'].extend(z['mean inverse reduced ion mobility array'])
 
@@ -550,7 +550,7 @@ def detect_hills(list data_for_analyse_tmp, dict args, float mz_step, bint pasef
 
         banned_prev_idx_set = set()
 
-        for idx, fm, fi in zip(basic_id_sorted, fast_array, (fast_array if paseftol is False else fast_array_im)):
+        for idx, fm, fi in zip(basic_id_sorted, fast_array, (fast_array if paseftol == 0 else fast_array_im)):
 
             flag1 = fm in prev_fast_dict
             flag2 = fm-1 in prev_fast_dict
@@ -571,12 +571,18 @@ def detect_hills(list data_for_analyse_tmp, dict args, float mz_step, bint pasef
                 elif flag3:
                     all_idx = prev_fast_dict[fm+1]
 
+                if paseftol > 0:
+                    flag1_im = fi in prev_fast_dict_im
+                    flag2_im = fi-1 in prev_fast_dict_im
+                    flag3_im = fi+1 in prev_fast_dict_im
+
                 best_intensity = 0
                 best_idx_prev = 0
                 mz_cur = z['m/z array'][idx]
 
 
-                all_prevs = [[idx_prev, data_for_analyse_tmp[spec_idx-1]['intensity array'][idx_prev]] for idx_prev in all_idx if idx_prev not in banned_prev_idx_set and (paseftol is False or idx_prev in prev_fast_dict_im[fi])]
+                #all_prevs = [[idx_prev, data_for_analyse_tmp[spec_idx-1]['intensity array'][idx_prev]] for idx_prev in all_idx if (idx_prev not in banned_prev_idx_set and (paseftol == 0 or idx_prev in all_idx_im_set))]
+                all_prevs = [[idx_prev, data_for_analyse_tmp[spec_idx-1]['intensity array'][idx_prev]] for idx_prev in all_idx if (idx_prev not in banned_prev_idx_set and (paseftol == 0 or (flag2_im and idx_prev in prev_fast_dict_im[fi-1]) or (flag1_im and idx_prev in prev_fast_dict_im[fi]) or (flag3_im and idx_prev in prev_fast_dict_im[fi+1])))]
                 for idx_prev, cur_intensity in all_prevs:
                     cur_mass_diff_with_sign = (mz_cur - data_for_analyse_tmp[spec_idx-1]['m/z array'][idx_prev]) / mz_cur * 1e6
                     cur_mass_diff = abs(cur_mass_diff_with_sign)
@@ -591,7 +597,7 @@ def detect_hills(list data_for_analyse_tmp, dict args, float mz_step, bint pasef
 
 
         prev_fast_dict = fast_dict
-        if paseftol is not False:
+        if paseftol > 0:
             prev_fast_dict_im = fast_dict_im
         prev_idx = last_idx
         last_idx = last_idx+len_mz
@@ -602,7 +608,7 @@ def detect_hills(list data_for_analyse_tmp, dict args, float mz_step, bint pasef
 @cython.cdivision(True)
 @cython.boundscheck(False)
 @cython.wraparound(True)
-def process_hills(dict hills_dict, list data_for_analyse_tmp, float mz_step, bint paseftol, dict args, bint dia=False):
+def process_hills(dict hills_dict, list data_for_analyse_tmp, float mz_step, float paseftol, dict args, bint dia=False):
 
     cdef dict 
     cdef float mz_median, i_sum_tmp, mz_val_tmp, i_val_tmp, im_median
@@ -640,7 +646,7 @@ def process_hills(dict hills_dict, list data_for_analyse_tmp, float mz_step, bin
         hills_dict['hills_idx_array_unique'] = sorted(list(set(hills_dict['hills_idx_array'])))
         hills_dict['hills_mz_median'] = []
         hills_dict['hills_mz_median_fast_dict'] = defaultdict(list)
-        if paseftol is not False:
+        if paseftol > 0:
             hills_dict['hills_im_median'] = []
             hills_dict['hills_im_median_fast_dict'] = defaultdict(set)
 
@@ -674,7 +680,7 @@ def process_hills(dict hills_dict, list data_for_analyse_tmp, float mz_step, bin
                 mz_median += mz_val_tmp * i_val_tmp
                 i_sum_tmp += i_val_tmp
             mz_median = mz_median / i_sum_tmp
-            if paseftol is not False:
+            if paseftol > 0:
                 tmp_im_array = [data_for_analyse_tmp[scan_val]['mean inverse reduced ion mobility array'][orig_idx_val] for orig_idx_val, scan_val in zip(tmp_orig_idx, tmp_scans)]
                 im_median = np.average(tmp_im_array, weights=tmp_intensity)
             tmp_scans_list = tmp_scans
@@ -690,7 +696,7 @@ def process_hills(dict hills_dict, list data_for_analyse_tmp, float mz_step, bin
             hills_dict['hills_mz_median_fast_dict'][mz_median_int].append(tmp_val)
             hills_dict['hills_mz_median_fast_dict'][mz_median_int+1].append(tmp_val)
 
-            if paseftol is not False:
+            if paseftol > 0:
                 hills_dict['hills_im_median'].append(im_median)
 
                 im_median_int = int(im_median/paseftol)

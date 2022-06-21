@@ -310,15 +310,51 @@ def process_tof(data_for_analyse_tmp):
     universal_dict = {}
     cnt = 0
 
+
+    temp_i = defaultdict(list)
+    for z in data_for_analyse_tmp:
+        cnt += 1
+        fast_set = z['m/z array'] // 50
+
+        if cnt <= 25:
+
+
+
+            for l in set(fast_set):
+
+                if l not in universal_dict:
+
+                    idxt = fast_set == l
+                    true_i = np.log10(z['intensity array'])[idxt]
+                    temp_i[l].extend(true_i)
+
+                    if len(temp_i[l]) > 150:
+
+                        temp_i[l] = np.array(temp_i[l])
+                        i_left = temp_i[l].min()
+                        i_right = temp_i[l].max()
+
+                        i_shift, i_sigma, covvalue = calibrate_mass(0.05, i_left, i_right, temp_i[l])
+                        # median_val = 
+                        print(i_shift, i_sigma, covvalue)
+                        universal_dict[l] = 10**(i_shift + 2 * i_sigma)#10**(np.median(true_i[idxt]) * 2)
+            
+
+    cnt = 0
+
     for z in data_for_analyse_tmp:
 
         fast_set = z['m/z array'] // 50
-        if cnt == 1:
+        while cnt <= 50:
 
+            cnt += 1
+
+            temp_i = []
 
             for l in set(fast_set):
                 idxt = fast_set == l
                 true_i = np.log10(z['intensity array'])[idxt]
+                temp_i.extend(true_i)
 
                 if len(true_i) > 150:
 
