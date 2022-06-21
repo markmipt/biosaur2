@@ -19,14 +19,6 @@ jobs:
       uses: pypa/cibuildwheel@v2.4.0
       env:
         CIBW_SKIP: "cp36-* cp37-* *-win32 *_i686 pp*"
-    - name: Upload binaries to release
-      uses: svenstaro/upload-release-action@v2
-      with:
-        repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: wheelhouse/*.whl
-        tag: ${{ github.ref }}
-        overwrite: false
-        file_glob: true
     - name: Upload artifacts
       uses: actions/upload-artifact@v3
       with:
@@ -35,20 +27,31 @@ jobs:
 
 
   publish:
-    name: Upload wheels to PyPI
+    name: Upload to PyPI
     runs-on: ubuntu-20.04
     needs: build
 
     steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-python@v3
+    - run : |
+        pip install -r requirements.txt
+        python setup.py sdist
+
     - name: Download artifacts
       uses: actions/download-artifact@v3
-
-    - run : |
+    - name: Move wheel files
+      run : |
         ls -R
-        mv -v */*.whl .
-        rmdir ubuntu-20.04 windows-2019
-
-
+        mv -v */*.whl dist/
+    - name: Upload binaries to release
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: dist/*.whl
+        tag: ${{ github.ref }}
+        overwrite: false
+        file_glob: true
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@v1.5.0
       with:
@@ -56,4 +59,4 @@ jobs:
         password: ${{ secrets.PYPI_API_TOKEN_BIOSAUR2 }}
         verbose: true
         print_hash: true
-        packages_dir: "."
+        packages_dir: "dist"
