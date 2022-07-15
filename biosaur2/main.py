@@ -224,7 +224,8 @@ def process_file(args):
             tmp = []
             for pf in ready:
                 isotopes = pf['isotopes']
-                if len(isotopes) >= i + 1:
+                scans = pf['nScans']
+                if len(isotopes) >= i + 1 and scans >= 5:
                     tmp.append(isotopes[i]['mass_diff_ppm'])
             isotopes_mass_error_map[i+1] = tmp
 
