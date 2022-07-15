@@ -109,6 +109,7 @@ def get_initial_isotopes(dict hills_dict, float isotopes_mass_accuracy, list iso
 
         banned_charges = dict()
 
+        hill_scans_1_number = hills_dict['hills_lengths'][idx_1]
         hill_scans_1 = hills_dict['hills_scan_sets'][idx_1]
         hill_scans_1_list = hills_dict['hills_scan_lists'][idx_1]
         hill_scans_1_list_first, hill_scans_1_list_last = hill_scans_1_list[0], hill_scans_1_list[-1]
@@ -210,6 +211,7 @@ def get_initial_isotopes(dict hills_dict, float isotopes_mass_accuracy, list iso
                             'hill_mz_1': hill_mz_1,
                             'isotopes': iter_candidates,
                             'nIsotopes': number_of_passed_isotopes,
+                            'nScans': hill_scans_1_number,
                             'charge': charge,
                             'FAIMS': faims_val,
                             'im': 0 if paseftol == 0 else im_mz_1,
