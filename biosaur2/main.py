@@ -168,6 +168,9 @@ def process_file(args):
         hills_dict = process_hills(hills_dict, data_for_analyse_tmp, mz_step, paseftol, args)
 
         logger.info('Detected number of hills: %d', len(set(hills_dict['hills_idx_array'])))
+        if args['write_hills']:
+            hills_dict, hills_features = utils.process_hills_extra(hills_dict, RT_dict, faims_val, data_start_id)
+            utils.write_output(hills_features, args, write_header, hills=True)
 
         isotopes_mass_accuracy = args['itol']
 

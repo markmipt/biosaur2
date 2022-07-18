@@ -55,6 +55,7 @@ def run():
     parser.add_argument('-debug', help='log debugging information', action='store_true')
     parser.add_argument('-tof', help='smart tof processing. Experimental', action='store_true')
     parser.add_argument('-profile', help='profile processing. Experimental', action='store_true')
+    parser.add_argument('-write_hills', help='write tsv file with detected hills', action='store_true')
     # parser.add_argument('-diaitol', help='mass accuracy for DIA isotopes in ppm', default=25, type=float)
     args = vars(parser.parse_args())
     logging.basicConfig(format='%(levelname)9s: %(asctime)s %(message)s',

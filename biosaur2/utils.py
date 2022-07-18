@@ -25,7 +25,29 @@ def calibrate_mass(bwidth, mass_left, mass_right, true_md):
 
     popt, pcov = curve_fit(noisygaus, b1, H1, p0=[1, np.median(true_md), 1, 1])
     mass_shift, mass_sigma = popt[1], abs(popt[2])
-    return mass_shift, mass_sigma, pcov[0][0]
+#     return mass_shift, mass_sigma, pcov[0][0]
+
+
+def process_hills_extra(hills_dict, RT_dict, faims_val, data_start_id):
+
+    hills_features = []
+    for idx_1 in range(len(hills_dict['hills_idx_array_unique'])):
+        hill_feature = {}
+        hills_dict, hill_intensity_apex_1, hill_scan_apex_1 = get_and_calc_apex_intensity_and_scan(hills_dict, idx_1)
+        hill_feature['mz'] = hills_dict['hills_mz_median'][idx_1]
+        hill_feature['nScans'] = hills_dict['hills_lengths'][idx_1]
+        hill_feature['rtApex'] = RT_dict[hill_scan_apex_1+data_start_id]
+        hill_feature['intensityApex'] = hill_intensity_apex_1
+        hill_feature['rtStart'] = RT_dict[hills_dict['hills_scan_lists'][idx_1][0]+data_start_id]
+        hill_feature['rtEnd'] = RT_dict[hills_dict['hills_scan_lists'][idx_1][-1]+data_start_id]
+        hill_feature['FAIMS'] = faims_val
+        if 'hills_im_median' in hills_dict:
+            hill_feature['im'] = hills_dict['hills_im_median'][idx_1]
+        else:
+            hill_feature['im'] = 0
+        hills_features.append(hill_feature)
+
+    return hills_dict, hills_features
 
 
 def calc_peptide_features(hills_dict, peptide_features, negative_mode, faims_val, RT_dict, data_start_id):
@@ -52,33 +74,46 @@ def calc_peptide_features(hills_dict, peptide_features, negative_mode, faims_val
     return peptide_features
 
 
-def write_output(peptide_features, args, write_header=True):
+def write_output(peptide_features, args, write_header=True, hills=False):
 
     input_mzml_path = args['file']
 
     if args['o']:
-        output_file = args['o']
+        output_file = (args['o'] if not hills else path.splitext(args['o']) + 'hills.tsv')
     else:
         output_file = path.splitext(input_mzml_path)[0]\
-            + path.extsep + 'features.tsv'
+            + path.extsep + ('features.tsv' if not hills else 'hills.tsv')
 
-    columns_for_output = [
-        'massCalib',
-        'rtApex',
-        'intensityApex',
-        'charge',
-        'nIsotopes',
-        'nScans',
-        'mz',
-        'rtStart',
-        'rtEnd',
-        'FAIMS',
-        'im',
-        'mono_hills_scan_lists',
-        'mono_hills_intensity_list',
-        'scanApex',
-        'isoerror2',
-    ]
+    if hills:
+
+        columns_for_output = [
+            'rtApex',
+            'intensityApex',
+            'nScans',
+            'mz',
+            'rtStart',
+            'rtEnd',
+            'FAIMS',
+            'im',
+        ]
+    else:
+        columns_for_output = [
+            'massCalib',
+            'rtApex',
+            'intensityApex',
+            'charge',
+            'nIsotopes',
+            'nScans',
+            'mz',
+            'rtStart',
+            'rtEnd',
+            'FAIMS',
+            'im',
+            'mono_hills_scan_lists',
+            'mono_hills_intensity_list',
+            'scanApex',
+            'isoerror2',
+        ]
 
     if write_header:
 
