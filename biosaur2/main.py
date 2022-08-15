@@ -183,10 +183,9 @@ def process_file(args):
         for i in range(0, 20000, 100):
             int_arr = binom.pmf(
                 isotopes_list,
-                float(i) /
-                averagine_mass *
-                averagine_C,
-                0.0107)
+                round(float(i) / averagine_mass * averagine_C),
+                0.0107
+            )
             int_arr_norm = int_arr / int_arr.sum()
             a[i] = int_arr_norm
 
