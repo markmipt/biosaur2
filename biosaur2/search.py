@@ -2,6 +2,7 @@ from . import main, main_dia
 import argparse
 from copy import deepcopy
 import logging
+import os
 
 def run():
     parser = argparse.ArgumentParser(
@@ -63,6 +64,10 @@ def run():
     logging.getLogger('matplotlib').setLevel(logging.WARNING)
     logger = logging.getLogger(__name__)
     logger.debug('Starting with args: %s', args)
+
+    if os.name == 'nt':
+        # logger.info('Turning off multiprocessing for Windows system')
+        args['nprocs'] = 1
 
     for filename in args['files']:
         logger.info('Starting file: %s', filename)

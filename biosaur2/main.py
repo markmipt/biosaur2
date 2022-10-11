@@ -8,12 +8,16 @@ logger = logging.getLogger(__name__)
 from .cutils import get_initial_isotopes, checking_cos_correlation_for_carbon, split_peaks, split_peaks_old, detect_hills, process_hills
 from multiprocessing import Queue, Process, cpu_count
 from collections import Counter, defaultdict
+import os
 
-def split_peaks_python(qout, hills_dict, data_for_analyse_tmp, args, counter_hills_idx, sorted_idx_child_process, sorted_idx_array_child_process, i, checked_id):
+def split_peaks_python(qout, hills_dict, data_for_analyse_tmp, args, counter_hills_idx, sorted_idx_child_process, sorted_idx_array_child_process, i, checked_id, win_sys=False):
 
     new_index_list = split_peaks(hills_dict, data_for_analyse_tmp, args, counter_hills_idx, sorted_idx_child_process, sorted_idx_array_child_process, i, checked_id)
-    qout.put((i, list(new_index_list)))
-    qout.put(None)
+    if win_sys:
+        return (i, list(new_index_list))
+    else:
+        qout.put((i, list(new_index_list)))
+        qout.put(None)
 
 def split_peaks_multi(hills_dict, data_for_analyse_tmp, args):
 
@@ -53,38 +57,60 @@ def split_peaks_multi(hills_dict, data_for_analyse_tmp, args):
         data_for_analyse_tmp_intensity = [z['intensity array'] for z in data_for_analyse_tmp]
 
         n_procs = args['nprocs']
-        qout = Queue()
-        new_idx_res = dict()
-        procs = []
-        ar2 = []
-        len_full = len(hills_dict['hills_idx_array_unique'])
-        if len_full <= 1000 * n_procs:
-            n_procs = 1
-        step = int(len_full / n_procs) + 1
-        checked_id = 0
-        for i in range(n_procs):
-            sorted_idx_child_process = list(hills_dict['hills_idx_array_unique'][i*step:i*step+step])
+
+
+
+        if n_procs == 1:
+            qout = []
+            procs = []
+            new_idx_res = dict()
+            checked_id = 0
+
+            sorted_idx_child_process = list(hills_dict['hills_idx_array_unique'])
             idx_unique_set = set(sorted_idx_child_process)
-            all_sets.append(idx_unique_set)
             local_idx = np.array([z in idx_unique_set for z in list(hills_dict['hills_idx_array'])])
             sorted_idx_array_child_process = hills_dict['hills_idx_array'][local_idx]
-            ar2.append(sorted_idx_array_child_process)
             sorted_idx_child_process = sorted(list(idx_unique_set))
+            i = 0
 
-            all_sorted_idx.append(local_idx)
-            p = Process(
-                target=split_peaks_python,
-                args=(qout, hills_dict, data_for_analyse_tmp_intensity, args, counter_hills_idx, sorted_idx_child_process, sorted_idx_array_child_process, i, checked_id))
-            checked_id += len(sorted_idx_array_child_process)
-                # args=(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, list(sorted_idx_child_process), qout))
-            p.start()
-            procs.append(p)
+            qout = split_peaks_python(qout, hills_dict, data_for_analyse_tmp_intensity, args, counter_hills_idx, sorted_idx_child_process, sorted_idx_array_child_process, i, checked_id, win_sys=True)
 
-        for _ in range(n_procs):
-            for ready_child_process in iter(qout.get, None):
-                new_idx_res[ready_child_process[0]] = ready_child_process[1]
-        for p in procs:
-            p.join()
+            new_idx_res[qout[0]] = qout[1]
+
+        else:
+
+            qout = Queue()
+            new_idx_res = dict()
+            procs = []
+            ar2 = []
+            len_full = len(hills_dict['hills_idx_array_unique'])
+            if len_full <= 1000 * n_procs:
+                n_procs = 1
+            step = int(len_full / n_procs) + 1
+            checked_id = 0
+            for i in range(n_procs):
+                sorted_idx_child_process = list(hills_dict['hills_idx_array_unique'][i*step:i*step+step])
+                idx_unique_set = set(sorted_idx_child_process)
+                all_sets.append(idx_unique_set)
+                local_idx = np.array([z in idx_unique_set for z in list(hills_dict['hills_idx_array'])])
+                sorted_idx_array_child_process = hills_dict['hills_idx_array'][local_idx]
+                ar2.append(sorted_idx_array_child_process)
+                sorted_idx_child_process = sorted(list(idx_unique_set))
+
+                all_sorted_idx.append(local_idx)
+                p = Process(
+                    target=split_peaks_python,
+                    args=(qout, hills_dict, data_for_analyse_tmp_intensity, args, counter_hills_idx, sorted_idx_child_process, sorted_idx_array_child_process, i, checked_id))
+                checked_id += len(sorted_idx_array_child_process)
+                    # args=(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, list(sorted_idx_child_process), qout))
+                p.start()
+                procs.append(p)
+
+            for _ in range(n_procs):
+                for ready_child_process in iter(qout.get, None):
+                    new_idx_res[ready_child_process[0]] = ready_child_process[1]
+            for p in procs:
+                p.join()
 
     final_idx_array = []
     last_id = 1
@@ -104,11 +130,14 @@ def split_peaks_multi(hills_dict, data_for_analyse_tmp, args):
 
     return hills_dict
 
-def get_initial_isotopes_python(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, sorted_idx_child_process, qout):
+def get_initial_isotopes_python(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, sorted_idx_child_process, qout, win_sys=False):
 
     ready_local = get_initial_isotopes(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, sorted_idx_child_process)
-    qout.put(ready_local)
-    qout.put(None)
+    if win_sys:
+        return ready_local
+    else:
+        qout.put(ready_local)
+        qout.put(None)
 
 def process_file(args):
 
@@ -193,27 +222,58 @@ def process_file(args):
         max_charge = args['cmax']
 
         n_procs = args['nprocs']
-        qout = Queue()
-        ready = []
-        procs = []
 
-        sorted_idx_full = [idx_1 for (idx_1, hill_idx_1), hill_mz_1 in sorted(list(zip(list(enumerate(hills_dict['hills_idx_array_unique'])), hills_dict['hills_mz_median'])), key=lambda x: x[-1])]
-        len_full = len(sorted_idx_full)
-        step = int(len_full / n_procs)
-        for i in range(n_procs):
-            sorted_idx_child_process = sorted_idx_full[i*step:i*step+step]
 
-            p = Process(
-                target=get_initial_isotopes_python,
-                args=(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, list(sorted_idx_child_process), qout))
-            p.start()
-            procs.append(p)
+        if n_procs == 1:
+            qout = []
+            ready = []
+            procs = []
 
-        for _ in range(n_procs):
-            for ready_child_process in iter(qout.get, None):
-                ready.extend(ready_child_process)
-        for p in procs:
-            p.join()
+            sorted_idx_full = [idx_1 for (idx_1, hill_idx_1), hill_mz_1 in sorted(list(zip(list(enumerate(hills_dict['hills_idx_array_unique'])), hills_dict['hills_mz_median'])), key=lambda x: x[-1])]
+            sorted_idx_child_process = sorted_idx_full
+
+            qout = get_initial_isotopes_python(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, list(sorted_idx_child_process), qout, win_sys=True)
+
+            # for i in range(n_procs):
+            #     sorted_idx_child_process = sorted_idx_full[i*step:i*step+step]
+
+            #     p = Process(
+            #         target=get_initial_isotopes_python,
+            #         args=(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, list(sorted_idx_child_process), qout))
+            #     p.start()
+            #     procs.append(p)
+
+            # for _ in range(n_procs):
+            # for ready_child_process in qout:
+            ready.extend(qout)
+            # for p in procs:
+            #     p.join()
+
+
+
+        else:
+
+            qout = Queue()
+            ready = []
+            procs = []
+
+            sorted_idx_full = [idx_1 for (idx_1, hill_idx_1), hill_mz_1 in sorted(list(zip(list(enumerate(hills_dict['hills_idx_array_unique'])), hills_dict['hills_mz_median'])), key=lambda x: x[-1])]
+            len_full = len(sorted_idx_full)
+            step = int(len_full / n_procs)
+            for i in range(n_procs):
+                sorted_idx_child_process = sorted_idx_full[i*step:i*step+step]
+
+                p = Process(
+                    target=get_initial_isotopes_python,
+                    args=(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, list(sorted_idx_child_process), qout))
+                p.start()
+                procs.append(p)
+
+            for _ in range(n_procs):
+                for ready_child_process in iter(qout.get, None):
+                    ready.extend(ready_child_process)
+            for p in procs:
+                p.join()
 
 
         logger.info('Number of potential isotope clusters: %d', len(ready))
