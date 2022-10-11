@@ -227,14 +227,14 @@ def process_file(args):
             for pf in ready:
                 isotopes = pf['isotopes']
                 scans = pf['nScans']
-                if len(isotopes) >= i + 1 and scans >= 5:
+                if len(isotopes) >= i + 1 and scans >= 3:
                     tmp.append(isotopes[i]['mass_diff_ppm'])
             isotopes_mass_error_map[i+1] = tmp
 
         for ic in range(1, 10, 1):
             if ic == 1:
 
-                if len(isotopes_mass_error_map[ic]) >= 100:
+                if len(isotopes_mass_error_map[ic]) >= 1000:
 
                     try:
 
