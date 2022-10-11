@@ -437,6 +437,9 @@ def process_mzml(args):
     for z in MS1OnlyMzML(source=input_mzml_path):
         if z['ms level'] == 1:
 
+            if 'raw ion mobility array' in z:
+                z['mean inverse reduced ion mobility array'] = z['raw ion mobility array']
+
             if 'mean inverse reduced ion mobility array' not in z:
                 z['ignore_ion_mobility'] = True
                 z['mean inverse reduced ion mobility array'] = np.zeros(len(z['m/z array']))
