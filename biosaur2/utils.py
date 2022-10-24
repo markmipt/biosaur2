@@ -66,6 +66,7 @@ def calc_peptide_features(hills_dict, peptide_features, negative_mode, faims_val
         pep_feature['scanApex'] = hills_dict['hills_scan_apex'][pep_feature['monoisotope idx']]
         pep_feature['rtApex'] = RT_dict[hills_dict['hills_scan_apex'][pep_feature['monoisotope idx']]+data_start_id]
         pep_feature['intensityApex'] = hills_dict['hills_intensity_apex'][pep_feature['monoisotope idx']]
+        pep_feature['intensitySum'] = sum(hills_dict['hills_intensity_array'][pep_feature['monoisotope idx']])
         pep_feature['rtStart'] = RT_dict[hills_dict['hills_scan_lists'][pep_feature['monoisotope idx']][0]+data_start_id]
         pep_feature['rtEnd'] = RT_dict[hills_dict['hills_scan_lists'][pep_feature['monoisotope idx']][-1]+data_start_id]
         pep_feature['mono_hills_scan_lists'] = hills_dict['hills_scan_lists'][pep_feature['monoisotope idx']]
@@ -89,6 +90,7 @@ def write_output(peptide_features, args, write_header=True, hills=False):
         columns_for_output = [
             'rtApex',
             'intensityApex',
+            'intensitySum',
             'nScans',
             'mz',
             'rtStart',
@@ -101,6 +103,7 @@ def write_output(peptide_features, args, write_header=True, hills=False):
             'massCalib',
             'rtApex',
             'intensityApex',
+            'intensitySum',
             'charge',
             'nIsotopes',
             'nScans',
