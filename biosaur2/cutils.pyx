@@ -307,10 +307,9 @@ def get_fast_dict(np.ndarray mz_sorted, float mz_step, list basic_id_sorted):
 def meanfilt(list data, int window_width):
     cdef np.ndarray cumsum_vec, ma_vec_array
     cdef list ma_vec
-    cumsum_vec = np.cumsum(np.insert(data, 0, 0))
-    ma_vec_array = (cumsum_vec[window_width:] -
-              cumsum_vec[:-window_width]) / window_width
-    ma_vec = data[:1] + list(ma_vec_array[1:]) + data[-1:]
+    cumsum_vec = np.cumsum(data, dtype=float)
+    cumsum_vec[window_width:] = cumsum_vec[window_width:] - cumsum_vec[:-window_width]
+    ma_vec = data[:1] + list(cumsum_vec / window_width) + data[-1:]
     return ma_vec
 
 
@@ -348,7 +347,7 @@ def split_peaks(dict hills_dict, list data_for_analyse_tmp, dict args, dict coun
             tmp_orig_idx = hills_dict['orig_idx_array'][checked_id+idx_start:checked_id+idx_end]
             tmp_intensity = [data_for_analyse_tmp[scan_val][orig_idx_val] for orig_idx_val, scan_val in zip(tmp_orig_idx, tmp_scans)]
 
-            smothed_intensity = meanfilt(tmp_intensity, 2)
+            smothed_intensity = meanfilt(tmp_intensity, 3)
             c_len = hill_length - min_length_hill
             idx = int(min_length_hill) - 1
             min_idx_list = []
@@ -445,7 +444,7 @@ def split_peaks_old(dict hills_dict, list data_for_analyse_tmp, dict args):
                 tmp_orig_idx = hills_dict['orig_idx_array'][idx_start:idx_end]
                 tmp_intensity = [data_for_analyse_tmp[scan_val]['intensity array'][orig_idx_val] for orig_idx_val, scan_val in zip(tmp_orig_idx, tmp_scans)]
 
-                smothed_intensity = meanfilt(tmp_intensity, 2)
+                smothed_intensity = meanfilt(tmp_intensity, 3)
                 c_len = hill_length - min_length_hill
                 idx = int(min_length_hill) - 1
                 min_idx_list = []
