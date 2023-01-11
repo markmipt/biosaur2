@@ -1,8 +1,6 @@
 pyteomics
 scipy
 numpy
-sklearn
-lightgbm
 pandas
 lxml
 cython
