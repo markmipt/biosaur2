@@ -38,6 +38,7 @@ def process_hills_extra(hills_dict, RT_dict, faims_val, data_start_id):
         hill_feature['nScans'] = hills_dict['hills_lengths'][idx_1]
         hill_feature['rtApex'] = RT_dict[hill_scan_apex_1+data_start_id]
         hill_feature['intensityApex'] = hill_intensity_apex_1
+        hill_feature['intensitySum'] = sum(hills_dict['hills_intensity_array'][idx_1])
         hill_feature['rtStart'] = RT_dict[hills_dict['hills_scan_lists'][idx_1][0]+data_start_id]
         hill_feature['rtEnd'] = RT_dict[hills_dict['hills_scan_lists'][idx_1][-1]+data_start_id]
         hill_feature['FAIMS'] = faims_val
@@ -80,7 +81,8 @@ def write_output(peptide_features, args, write_header=True, hills=False):
     input_mzml_path = args['file']
 
     if args['o']:
-        output_file = (args['o'] if not hills else path.splitext(args['o']) + 'hills.tsv')
+        output_file = args['o'] if not hills else (path.splitext(args['o'])[0]\
+            + path.extsep + 'hills.tsv')
     else:
         output_file = path.splitext(input_mzml_path)[0]\
             + path.extsep + ('features.tsv' if not hills else 'hills.tsv')
