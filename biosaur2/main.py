@@ -165,6 +165,7 @@ def process_file(args):
                 data_for_analyse_tmp.append(z)
                 RT_dict[data_cur_id] = float(z['scanList']['scan'][0]['scan start time'])
                 data_cur_id += 1
+                
 
 
         hill_mass_accuracy = args['htol']
@@ -192,8 +193,10 @@ def process_file(args):
         paseftol = args['paseftol']
 
         hills_dict = detect_hills(data_for_analyse_tmp, args, mz_step, paseftol)
+        logger.info('Detected number of hills before splitting: %d', len(set(hills_dict['hills_idx_array'])))
 
         hills_dict = split_peaks_multi(hills_dict, data_for_analyse_tmp, args)
+        logger.info('Starting hills processing')
         hills_dict = process_hills(hills_dict, data_for_analyse_tmp, mz_step, paseftol, args)
 
         logger.info('Detected number of hills: %d', len(set(hills_dict['hills_idx_array'])))
