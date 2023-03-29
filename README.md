@@ -29,6 +29,41 @@ Using the pip:
 
     pip install biosaur2
     
+Available parameters
+-------------
+-minlh: Minimum number of MS1 scans for peaks extracted from the mzML file. Optimal usually is in 1-3 range for 5-15 min LC gradients and 5-10 for 60-180 min gradients. Default = 2
+
+-mini : Minimal intensity threshold for peaks extracted from the mzML file. Default = 1
+
+-minmz : Minimal m/z value for peaks extracted from the mzML file. Default = 350
+
+-maxmz : Maximal m/z value for peaks extracted from the mzML file. Default = 1500
+
+-htol : Mass accuracy in ppm to combine peaks into hills between scans. Default = 8 ppm
+
+-itol : Mass accuracy in ppm for isotopic hills. Default = 8 ppm
+
+-o : Path to output feature files. Default is the name of the input mzML file with added “.features.tsv” mask stored in the folder of the original mzML file
+
+-hvf: Threshold to split hills into multiple if local minimum intensity multiplied by hvf is less than both surrounding local maximums. All peaks after splitting must have at least max(2, minlh) MS1 scans. Default = 1.3
+
+-nm : Negative mode. 1-true, 0-false. Affect only neutral mass column calculated in the output features table.  Default = 0
+
+-cmin: Minimum allowed charge for isotopic clusters. Default = 1
+
+-cmax: Maximal allowed charge for isotopic clusters. Default = 6
+
+-nprocs: Number of processes used by biosau2. Automatically set to 1 for Windows system due to multiprocessing issues. Default = 4
+
+-write_hills: Add hills output if added as the parameter
+
+-paseminlh: For TIMS-TOF data. Minimum number of ion mobility values for m/z peaks to be kept in the analysis. Default = 1
+
+-paseftol: For TIMS-TOF data. Ion mobility tolerance used to combine close peaks into a single one. Default = 0.05
+
+-pasefmini: For TIMS-TOF data. Minimal intensity threshold for peaks after combining peaks with close m/z (itol option) and ion mobility (paseftol option) values. Default = 100
+
+    
 
 Links
 -----
