@@ -63,6 +63,8 @@ Available parameters
 
 -pasefmini: For TIMS-TOF data. Minimal intensity threshold for peaks after combining peaks with close m/z (itol option) and ion mobility (paseftol option) values. Default = 100
 
+-tof: Experimental. If added as the parameter, biosaur2 estimates noise intensity distribution across m/z range and automatically calculates intensity cutoffs for different m/z value ranges. This is an alternative way to reduce noise to the "-mini" option which is a fixed intensity threshold for all m/z values. Can be usefull for TOF data
+
     
 
 Links
