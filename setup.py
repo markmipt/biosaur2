@@ -6,7 +6,7 @@ setup.py file for biosaur2
 import os
 from setuptools import setup, find_packages, Extension
 
-version = open('VERSION').readline().strip()
+version = open('VERSION', encoding="utf8").readline().strip()
 
 
 def make_extensions():
@@ -44,11 +44,11 @@ setup(
     name                 = 'biosaur2',
     version              = version,
     description          = '''A feature detection LC-MS1 spectra.''',
-    long_description     = (''.join(open('README.md').readlines())),
+    long_description     = (''.join(open('README.md', encoding="utf8").readlines())),
     long_description_content_type = 'text/markdown',
     author               = 'Mark Ivanov',
     author_email         = 'markmipt@gmail.com',
-    install_requires     = [line.strip() for line in open('requirements.txt')],
+    install_requires     = [line.strip() for line in open('requirements.txt', encoding="utf8")],
     ext_modules          = make_extensions(),
     classifiers          = ['Intended Audience :: Science/Research',
                             'Programming Language :: Python :: 3.9',
