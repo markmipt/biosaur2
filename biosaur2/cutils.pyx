@@ -1,6 +1,4 @@
 cimport cython
-from cython.parallel cimport prange, parallel
-cimport openmp
 import numpy as np
 cimport numpy as np
 import itertools
