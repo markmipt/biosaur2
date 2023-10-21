@@ -101,8 +101,8 @@ def write_output(peptide_features, args, write_header=True, hills=False):
             'FAIMS',
             'im',
         ]
-        if args.write_extra_details:
-            columns_for_output += 'hill_idx'
+        if args['write_extra_details']:
+            columns_for_output += ['hill_idx']
     else:
         columns_for_output = [
             'massCalib',
@@ -122,8 +122,8 @@ def write_output(peptide_features, args, write_header=True, hills=False):
             'scanApex',
             'isoerror2',
         ]
-        if args.write_extra_details:
-            columns_for_output += ['isoerror','isotopes','intensity_array_for_cos_corr']
+        if args['write_extra_details']:
+            columns_for_output += ['isoerror','isotopes','intensity_array_for_cos_corr','monoisotope hill idx','monoisotope idx']
 
     if write_header:
 
