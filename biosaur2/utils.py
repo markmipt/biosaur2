@@ -47,6 +47,9 @@ def process_hills_extra(hills_dict, RT_dict, faims_val, data_start_id):
         else:
             hill_feature['im'] = 0
         hill_feature['hill_idx'] = hills_dict['hills_idx_array_unique'][idx_1]
+        hill_feature['hills_scan_lists'] = hills_dict['hills_scan_lists'][idx_1]
+        hill_feature['hills_intensity_list'] = hills_dict['hills_intensity_array'][idx_1]
+        hill_feature['hills_mz_array'] = hills_dict['tmp_mz_array'][idx_1]
         hills_features.append(hill_feature)
 
     return hills_dict, hills_features
@@ -102,7 +105,7 @@ def write_output(peptide_features, args, write_header=True, hills=False):
             'im',
         ]
         if args['write_extra_details']:
-            columns_for_output += ['hill_idx']
+            columns_for_output += ['hill_idx', 'hills_scan_lists', 'hills_intensity_list', 'hills_mz_array']
     else:
         columns_for_output = [
             'massCalib',
