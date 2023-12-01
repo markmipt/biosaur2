@@ -43,6 +43,8 @@ Available parameters
 
 -itol : Mass accuracy in ppm for isotopic hills. Default = 8 ppm
 
+-ignore_iso_calib : Turn off accurate isotope error estimation if added as the parameter. Input "itol" value will be used instead of gaussian fitting of mass errors and systematic shifts for every isotope number.  
+
 -o : Path to output feature files. Default is the name of the input mzML file with added “.features.tsv” mask stored in the folder of the original mzML file
 
 -hvf: Threshold to split hills into multiple if local minimum intensity multiplied by hvf is less than both surrounding local maximums. All peaks after splitting must have at least max(2, minlh) MS1 scans. Default = 1.3

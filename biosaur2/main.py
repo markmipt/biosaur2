@@ -281,50 +281,62 @@ def process_file(args):
 
         logger.info('Number of potential isotope clusters: %d', len(ready))
 
-        isotopes_mass_error_map = {}
-        for ic in range(1, 10, 1):
-            isotopes_mass_error_map[ic] = []
+        if args['ignore_iso_calib']:
+            isotopes_mass_error_map = {}
+            for ic in range(1, 10, 1):
+                isotopes_mass_error_map[ic] = [0, args['itol']]
+        else:
 
-        for i in range(9):
-            tmp = []
-            for pf in ready:
-                isotopes = pf['isotopes']
-                scans = pf['nScans']
-                if len(isotopes) >= i + 1 and scans >= 3:
-                    tmp.append(isotopes[i]['mass_diff_ppm'])
-            isotopes_mass_error_map[i+1] = tmp
+            isotopes_mass_error_map = {}
+            for ic in range(1, 10, 1):
+                isotopes_mass_error_map[ic] = []
 
-        for ic in range(1, 10, 1):
-            if ic == 1:
+            for i in range(9):
+                tmp = []
+                for pf in ready:
+                    isotopes = pf['isotopes']
+                    scans = pf['nScans']
+                    if len(isotopes) >= i + 1 and scans >= 3:
+                        tmp.append(isotopes[i]['mass_diff_ppm'])
+                isotopes_mass_error_map[i+1] = tmp
 
-                if len(isotopes_mass_error_map[ic]) >= 1000:
+            for ic in range(1, 10, 1):
+                if ic <= 3:
 
-                    try:
+                    if len(isotopes_mass_error_map[ic]) >= 1000:
 
-                        true_md = np.array(isotopes_mass_error_map[ic])
+                        try:
 
-                        mass_left = -min(isotopes_mass_error_map[ic])
-                        mass_right = max(isotopes_mass_error_map[ic])
+                            true_md = np.array(isotopes_mass_error_map[ic])
+
+                            mass_left = -min(isotopes_mass_error_map[ic])
+                            mass_right = max(isotopes_mass_error_map[ic])
 
 
-                        mass_shift, mass_sigma, covvalue = utils.calibrate_mass(0.05, mass_left, mass_right, true_md)
-                        if abs(mass_shift) >= max(mass_left, mass_right):
-                            mass_shift, mass_sigma, covvalue = utils.calibrate_mass(0.25, mass_left, mass_right, true_md)
-                        if np.isinf(covvalue):
                             mass_shift, mass_sigma, covvalue = utils.calibrate_mass(0.05, mass_left, mass_right, true_md)
+                            if abs(mass_shift) >= max(mass_left, mass_right):
+                                mass_shift, mass_sigma, covvalue = utils.calibrate_mass(0.25, mass_left, mass_right, true_md)
+                            if np.isinf(covvalue):
+                                mass_shift, mass_sigma, covvalue = utils.calibrate_mass(0.05, mass_left, mass_right, true_md)
 
-                        isotopes_mass_error_map[ic] = [mass_shift, mass_sigma]
+                            isotopes_mass_error_map[ic] = [mass_shift, mass_sigma]
 
-                    except:
-                        isotopes_mass_error_map[ic] = [0, 10]
+                        except:
+                            isotopes_mass_error_map[ic] = [0, 10]
+
+                    else:
+                        if ic -1 in isotopes_mass_error_map:
+                            isotopes_mass_error_map[ic] = deepcopy(isotopes_mass_error_map[ic-1])
+                            isotopes_mass_error_map[ic][0] += isotopes_mass_error_map[ic-1][0] - isotopes_mass_error_map.get(ic-2, [0, ])[0]
+                            isotopes_mass_error_map[ic][1] *= isotopes_mass_error_map[ic-1][1] / isotopes_mass_error_map.get(ic-2, isotopes_mass_error_map[ic-1])[1]
+
+                        else:
+                            isotopes_mass_error_map[ic] = [0, 10]
 
                 else:
-                    isotopes_mass_error_map[ic] = [0, 10]
-
-            else:
-                isotopes_mass_error_map[ic] = deepcopy(isotopes_mass_error_map[ic-1])
-                isotopes_mass_error_map[ic][0] += isotopes_mass_error_map[ic-1][0] - isotopes_mass_error_map[ic-2][0]
-                isotopes_mass_error_map[ic][1] *= isotopes_mass_error_map[ic-1][1] / isotopes_mass_error_map[ic-2][1]
+                    isotopes_mass_error_map[ic] = deepcopy(isotopes_mass_error_map[ic-1])
+                    isotopes_mass_error_map[ic][0] += isotopes_mass_error_map[ic-1][0] - isotopes_mass_error_map.get(ic-2, [0, ])[0]
+                    isotopes_mass_error_map[ic][1] *= isotopes_mass_error_map[ic-1][1] / isotopes_mass_error_map.get(ic-2, isotopes_mass_error_map[ic-1])[1]
 
         logger.info('Average mass shift between monoisotopic and first 13C isotope: %.3f ppm', isotopes_mass_error_map[1][0])
         logger.info('Average mass std between monoisotopic and first 13C isotope: %.3f ppm', isotopes_mass_error_map[1][1])
