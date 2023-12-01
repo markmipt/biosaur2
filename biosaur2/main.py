@@ -130,9 +130,9 @@ def split_peaks_multi(hills_dict, data_for_analyse_tmp, args):
 
     return hills_dict
 
-def get_initial_isotopes_python(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, sorted_idx_child_process, qout, win_sys=False):
+def get_initial_isotopes_python(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, ivf, sorted_idx_child_process, qout, win_sys=False):
 
-    ready_local = get_initial_isotopes(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, sorted_idx_child_process)
+    ready_local = get_initial_isotopes(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, ivf, sorted_idx_child_process)
     if win_sys:
         return ready_local
     else:
@@ -218,11 +218,13 @@ def process_file(args):
                 round(float(i) / averagine_mass * averagine_C),
                 0.0107
             )
+            max_pos = np.argmax(int_arr)
             int_arr_norm = int_arr / int_arr.sum()
-            a[i] = int_arr_norm
+            a[i] = (int_arr_norm, max_pos)
 
         min_charge = args['cmin']
         max_charge = args['cmax']
+        ivf = args['ivf']
 
         n_procs = args['nprocs']
 
@@ -235,7 +237,7 @@ def process_file(args):
             sorted_idx_full = [idx_1 for (idx_1, hill_idx_1), hill_mz_1 in sorted(list(zip(list(enumerate(hills_dict['hills_idx_array_unique'])), hills_dict['hills_mz_median'])), key=lambda x: x[-1])]
             sorted_idx_child_process = sorted_idx_full
 
-            qout = get_initial_isotopes_python(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, list(sorted_idx_child_process), qout, win_sys=True)
+            qout = get_initial_isotopes_python(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, ivf, list(sorted_idx_child_process), qout, win_sys=True)
 
             # for i in range(n_procs):
             #     sorted_idx_child_process = sorted_idx_full[i*step:i*step+step]
@@ -268,7 +270,7 @@ def process_file(args):
 
                 p = Process(
                     target=get_initial_isotopes_python,
-                    args=(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, list(sorted_idx_child_process), qout))
+                    args=(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, ivf, list(sorted_idx_child_process), qout))
                 p.start()
                 procs.append(p)
 

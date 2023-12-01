@@ -81,13 +81,13 @@ def cos_correlation(set hill_scans_1, dict hill_idict_1, float hill_sqrt_of_i_1,
 @cython.cdivision(True)
 @cython.boundscheck(False)
 @cython.wraparound(True)
-def get_initial_isotopes(dict hills_dict, float isotopes_mass_accuracy, list isotopes_list, dict a, int min_charge, int max_charge, float mz_step, float paseftol, float faims_val, list sorted_idx_child_process):
+def get_initial_isotopes(dict hills_dict, float isotopes_mass_accuracy, list isotopes_list, dict a, int min_charge, int max_charge, float mz_step, float paseftol, float faims_val, float ivf, list sorted_idx_child_process):
 
     cdef list ready, charges, hill_scans_1_list, hill_scans_2_list, candidates, tmp_candidates
     cdef int idx_1, hill_idx_1, idx_2, hill_idx_2, im_to_check_fast, hill_scans_1_list_first, hill_scans_1_list_last
-    cdef int hill_scans_2_list_first, hill_scans_2_list_last, charge, isotope_number, m_to_check_fast
+    cdef int hill_scans_2_list_first, hill_scans_2_list_last, charge, isotope_number, m_to_check_fast, max_pos, i_local_isotope
     cdef float im_mz_1, hill_mz_1, im_mz_2, hill_mz_2, m_to_check, mass_diff_abs, cos_cor_RT
-    cdef float hill_sqrt_of_i_1, hill_sqrt_of_i_2
+    cdef float hill_sqrt_of_i_1, hill_sqrt_of_i_2, local_minimum, hill_intensity_apex_1, hill_intensity_apex_2
     cdef double mass_diff_ppm
     cdef dict banned_charges, hill_idict_1, hill_idict_2, local_isotopes_dict
     cdef set hill_scans_1, hill_scans_2
@@ -177,7 +177,9 @@ def get_initial_isotopes(dict hills_dict, float isotopes_mass_accuracy, list iso
 
                 neutral_mass = hill_mz_1 * charge
 
-                tmp_intensity = a[int(100 * (neutral_mass // 100))]
+                tmp_intensity, max_pos = a[int(100 * (neutral_mass // 100))]
+                if max_pos < 4:
+                    max_pos = 4
 
                 _, hill_intensity_apex_1, hill_scan_apex_1 = get_and_calc_apex_intensity_and_scan(hills_dict, idx_1)
                 mono_hills_scan_lists =  hills_dict['hills_scan_lists'][idx_1]
@@ -192,13 +194,25 @@ def get_initial_isotopes(dict hills_dict, float isotopes_mass_accuracy, list iso
 
                     all_exp_intensity = [hill_intensity_apex_1, ]
 
+                    i_local_isotope = 1
+
                     for local_isotopes_dict in iter_candidates:
 
                         idx_2 = local_isotopes_dict['isotope_idx']
 
                         _, hill_intensity_apex_2, hill_scan_apex_2 = get_and_calc_apex_intensity_and_scan(hills_dict, idx_2)
                         
+                        if i_local_isotope > max_pos:
+                            if i_local_isotope == max_pos + 1 or hill_intensity_apex_2 < local_minimum:
+                                local_minimum = hill_intensity_apex_2
+                                local_minimum_pos = i_local_isotope
+                            if hill_intensity_apex_2 >= ivf * local_minimum:
+                                all_exp_intensity = all_exp_intensity[:local_minimum_pos+1]
+                                break
+
                         all_exp_intensity.append(hill_intensity_apex_2)
+                        i_local_isotope += 1
+
                     cos_corr, number_of_passed_isotopes = checking_cos_correlation_for_carbon(all_theoretical_int, all_exp_intensity, 0.6)
 
                     if cos_corr:
