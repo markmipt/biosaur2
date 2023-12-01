@@ -117,6 +117,7 @@ def write_output(peptide_features, args, write_header=True, hills=False):
             'mono_hills_scan_lists',
             'mono_hills_intensity_list',
             'scanApex',
+            'isoerror',
             'isoerror2',
         ]
 

@@ -90,6 +90,7 @@ def get_initial_isotopes(dict hills_dict, float isotopes_mass_accuracy, list iso
     cdef int hill_scans_2_list_first, hill_scans_2_list_last, charge, isotope_number, m_to_check_fast
     cdef float im_mz_1, hill_mz_1, im_mz_2, hill_mz_2, m_to_check, mass_diff_abs, cos_cor_RT
     cdef float hill_sqrt_of_i_1, hill_sqrt_of_i_2
+    cdef double mass_diff_ppm
     cdef dict banned_charges, hill_idict_1, hill_idict_2, local_isotopes_dict
     cdef set hill_scans_1, hill_scans_2
 
@@ -152,12 +153,14 @@ def get_initial_isotopes(dict hills_dict, float isotopes_mass_accuracy, list iso
                                         hills_dict, _, _ = get_and_calc_apex_intensity_and_scan(hills_dict, idx_1)
                                         hills_dict, _, _ = get_and_calc_apex_intensity_and_scan(hills_dict, idx_2)
 
+                                        mass_diff_ppm = mass_diff_abs*1e6/m_to_check
+
                                         local_isotopes_dict = {
                                             'isotope_number': isotope_number,
                                             'isotope_hill_idx': hill_idx_2,
                                             'isotope_idx': idx_2,
                                             'cos_cor': cos_cor_RT,
-                                            'mass_diff_ppm': mass_diff_abs/m_to_check*1e6,
+                                            'mass_diff_ppm': mass_diff_ppm,
                                         }
 
                                         tmp_candidates.append(local_isotopes_dict)

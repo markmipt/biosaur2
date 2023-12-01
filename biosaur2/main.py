@@ -323,11 +323,13 @@ def process_file(args):
 
             else:
                 isotopes_mass_error_map[ic] = deepcopy(isotopes_mass_error_map[ic-1])
-                isotopes_mass_error_map[ic][0] = isotopes_mass_error_map[ic][0] - 0.45
+                isotopes_mass_error_map[ic][0] += isotopes_mass_error_map[ic-1][0] - isotopes_mass_error_map[ic-2][0]
+                isotopes_mass_error_map[ic][1] *= isotopes_mass_error_map[ic-1][1] / isotopes_mass_error_map[ic-2][1]
 
         logger.info('Average mass shift between monoisotopic and first 13C isotope: %.3f ppm', isotopes_mass_error_map[1][0])
         logger.info('Average mass std between monoisotopic and first 13C isotope: %.3f ppm', isotopes_mass_error_map[1][1])
 
+        logger.debug(isotopes_mass_error_map)
 
         max_l = len(ready)
         cur_l = 0
@@ -339,6 +341,7 @@ def process_file(args):
 
             for cand in pep_feature['isotopes']:
                 map_val = isotopes_mass_error_map[cand['isotope_number']]
+
                 if abs(cand['mass_diff_ppm'] - map_val[0]) <= 5 * map_val[1]:
                     tmp.append(cand)
                 else:
@@ -395,26 +398,21 @@ def process_file(args):
         cur_isotopes = ready[0]['nIsotopes']
 
 
-        cnt_mark = 0
-
         while cur_l < max_l:
-            cnt_mark += 1
             pep_feature = ready[cur_l]
             n_iso = pep_feature['nIsotopes']
             if n_iso < cur_isotopes:
                 ready = sorted(ready, key=func_for_sort)
                 cur_isotopes = n_iso
                 cur_l = 0
+                pep_feature = ready[cur_l]
 
             if pep_feature['monoisotope hill idx'] not in ready_set:
                 if not any(cand['isotope_hill_idx'] in ready_set for cand in pep_feature['isotopes']):
-                # if not any(ready_set[cand['isotope_hill_idx']]>1 for cand in pep_feature['isotopes']):
                     ready_final.append(pep_feature)
                     ready_set.add(pep_feature['monoisotope hill idx'])
-                    # ready_set[pep_feature['monoisotope hill idx']] += 1
                     for cand in pep_feature['isotopes']:
                         ready_set.add(cand['isotope_hill_idx'])
-                        # ready_set[cand['isotope_hill_idx']] += 1
                     del ready[cur_l]
                     max_l -= 1
                     cur_l -= 1
@@ -432,16 +430,17 @@ def process_file(args):
                     tmp_n_isotopes = len(tmp)
 
                     if tmp_n_isotopes:
+
                         all_theoretical_int, all_exp_intensity = pep_feature['intensity_array_for_cos_corr']
                         all_theoretical_int = all_theoretical_int[:tmp_n_isotopes+1]
                         all_exp_intensity = all_exp_intensity[:tmp_n_isotopes+1]
                         cos_corr, number_of_passed_isotopes = checking_cos_correlation_for_carbon(all_theoretical_int, all_exp_intensity, 0.6)
                         if cos_corr:
-
                             ready[cur_l]['cos_cor_isotopes'] = cos_corr
                             ready[cur_l]['isotopes'] = tmp
                             ready[cur_l]['nIsotopes'] = tmp_n_isotopes + 1
                             ready[cur_l]['intensity_array_for_cos_corr'] = [all_theoretical_int, all_exp_intensity]
+                            cur_l -= 1
                             # ready[cur_l]['sumI'] = np.log10(sum(all_exp_intensity))
                             # ready[cur_l]['mass_diff_ppm_abs'] = abs(ready[cur_l]['isotopes'][0]['mass_diff_ppm'])
 
