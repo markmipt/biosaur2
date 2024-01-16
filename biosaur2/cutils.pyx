@@ -331,6 +331,111 @@ def meanfilt(list data, int window_width):
 @cython.cdivision(True)
 @cython.boundscheck(False)
 @cython.wraparound(True)
+def centroid_pasef_scan(dict scandict, float mz_step, float hill_mz_accuracy, float ion_mobility_accuracy, float pasefmini, int pasefminlh):
+    cdef np.ndarray mz_ar, intensity_ar, ion_mobility_ar, ion_mobility_ar_fast, mz_ar_fast
+    cdef list mz_ar_new, intensity_ar_new, ion_mobility_ar_new, tmp, all_intensity, all_mz, all_ion_mob
+    cdef float ion_mobility_step, mass_accuracy_cur, i_val_new, mz_val_new, ion_mob_new
+    cdef int max_peak_idx, peak_idx, mz_val_int, ion_mob_val_int, peak_idx_2, mz_val_int_2, ion_mob_val_int_2, l_new
+    cdef set banned_idx
+
+    mz_ar_new = []
+    intensity_ar_new = []
+    ion_mobility_ar_new = []
+
+    mz_ar = scandict['m/z array']
+    intensity_ar = scandict['intensity array']
+    ion_mobility_ar = scandict['mean inverse reduced ion mobility array']
+
+    ion_mobility_step = max(ion_mobility_ar) * ion_mobility_accuracy
+
+    ion_mobility_ar_fast = (ion_mobility_ar/ion_mobility_step).astype(int)
+    mz_ar_fast = (mz_ar/mz_step).astype(int)
+
+    idx = np.argsort(mz_ar_fast)
+    mz_ar_fast = mz_ar_fast[idx]
+    ion_mobility_ar_fast = ion_mobility_ar_fast[idx]
+
+    mz_ar = mz_ar[idx]
+    intensity_ar = intensity_ar[idx]
+    ion_mobility_ar = ion_mobility_ar[idx]
+
+    max_peak_idx = len(mz_ar)
+
+    banned_idx = set()
+
+    peak_idx = 0
+    while peak_idx < max_peak_idx:
+
+        if peak_idx not in banned_idx:
+
+            mass_accuracy_cur = mz_ar[peak_idx] * 1e-6 * hill_mz_accuracy
+
+            mz_val_int = mz_ar_fast[peak_idx]
+            ion_mob_val_int = ion_mobility_ar_fast[peak_idx]
+
+            tmp = [peak_idx, ]
+
+            peak_idx_2 = peak_idx + 1
+
+            while peak_idx_2 < max_peak_idx:
+
+
+                if peak_idx_2 not in banned_idx:
+
+                    mz_val_int_2 = mz_ar_fast[peak_idx_2]
+                    if mz_val_int_2 - mz_val_int > 1:
+                        break
+                    elif abs(mz_ar[peak_idx]-mz_ar[peak_idx_2]) <= mass_accuracy_cur:
+                        ion_mob_val_int_2 = ion_mobility_ar_fast[peak_idx_2]
+                        if abs(ion_mob_val_int - ion_mob_val_int_2) <= 1:
+                            if abs(ion_mobility_ar[peak_idx] - ion_mobility_ar[peak_idx_2]) <= ion_mobility_accuracy:
+                                tmp.append(peak_idx_2)
+                                peak_idx = peak_idx_2
+                peak_idx_2 += 1
+
+        l_new = len(tmp)
+        if l_new >= pasefminlh:
+
+            if l_new == 1:
+                i_val_new = intensity_ar[peak_idx]
+                if i_val_new >= pasefmini:
+                    mz_val_new = mz_ar[peak_idx]
+                    ion_mob_new = ion_mobility_ar[peak_idx]
+
+                    intensity_ar_new.append(i_val_new)
+                    mz_ar_new.append(mz_val_new)
+                    ion_mobility_ar_new.append(ion_mob_new)
+
+                    banned_idx.add(peak_idx)
+
+            else:
+
+                all_intensity = [intensity_ar[p_id] for p_id in tmp]
+                i_val_new = sum(all_intensity)
+
+                if i_val_new >= pasefmini:
+
+                    all_mz = [mz_ar[p_id] for p_id in tmp]
+                    all_ion_mob = [ion_mobility_ar[p_id] for p_id in tmp]
+
+                    mz_val_new = np.average(all_mz, weights=all_intensity)
+                    ion_mob_new = np.average(all_ion_mob, weights=all_intensity)
+
+                    intensity_ar_new.append(i_val_new)
+                    mz_ar_new.append(mz_val_new)
+                    ion_mobility_ar_new.append(ion_mob_new)
+
+                    banned_idx.update(tmp)
+
+        peak_idx += 1
+
+
+    return mz_ar_new, intensity_ar_new, ion_mobility_ar_new
+
+
+@cython.cdivision(True)
+@cython.boundscheck(False)
+@cython.wraparound(True)
 def split_peaks(dict hills_dict, list data_for_analyse_tmp, dict args, dict counter_hills_idx, list sorted_idx_child_process, np.ndarray sorted_idx_array_child_process, int nproc, int checked_id):
 
     cdef float hillValleyFactor, min_val, mult_val

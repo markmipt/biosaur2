@@ -6,7 +6,7 @@ import math
 from scipy.optimize import curve_fit
 import logging
 logger = logging.getLogger(__name__)
-from .cutils import get_fast_dict, get_and_calc_apex_intensity_and_scan
+from .cutils import get_fast_dict, get_and_calc_apex_intensity_and_scan, centroid_pasef_scan
 
 class MS1OnlyMzML(mzml.MzML): 
      _default_iter_path = '//spectrum[./*[local-name()="cvParam" and @name="ms level" and @value="1"]]' 
@@ -137,155 +137,102 @@ def write_output(peptide_features, args, write_header=True, hills=False):
 def centroid_pasef_data(data_for_analyse_tmp, args, mz_step):
 
     cnt_ms1_scans = len(data_for_analyse_tmp)
+
+    ion_mobility_accuracy = args['paseftol']
+    hill_mz_accuracy = args['htol']
+    pasefmini = args['pasefmini']
+    pasefminlh = args['pasefminlh']
     for spec_idx, z in enumerate(data_for_analyse_tmp):
 
-        logger.info('PASEF scans analysis: %d/%d', spec_idx+1, cnt_ms1_scans)
-        logger.info('number of m/z peaks in scan: %d', len(z['m/z array']))
+        logger.debug('PASEF scans analysis: %d/%d', spec_idx+1, cnt_ms1_scans)
+        logger.debug('number of m/z peaks in scan: %d', len(z['m/z array']))
 
         if 'ignore_ion_mobility' not in z:
 
-            mz_ar_new = []
-            intensity_ar_new = []
-            ion_mobility_ar_new = []
+            # mz_ar_new = []
+            # intensity_ar_new = []
+            # ion_mobility_ar_new = []
 
-            mz_ar = z['m/z array']
-            intensity_ar = z['intensity array']
-            ion_mobility_ar = z['mean inverse reduced ion mobility array']
+            # mz_ar = z['m/z array']
+            # intensity_ar = z['intensity array']
+            # ion_mobility_ar = z['mean inverse reduced ion mobility array']
 
-            ion_mobility_accuracy = args['paseftol']
-            ion_mobility_step = max(ion_mobility_ar) * ion_mobility_accuracy
+            # ion_mobility_step = max(ion_mobility_ar) * ion_mobility_accuracy
 
-            ion_mobility_ar_fast = (ion_mobility_ar/ion_mobility_step).astype(int)
-            mz_ar_fast = (mz_ar/mz_step).astype(int)
+            # ion_mobility_ar_fast = (ion_mobility_ar/ion_mobility_step).astype(int)
+            # mz_ar_fast = (mz_ar/mz_step).astype(int)
 
-            idx = np.argsort(mz_ar_fast)
-            mz_ar_fast = mz_ar_fast[idx]
-            ion_mobility_ar_fast = ion_mobility_ar_fast[idx]
+            # idx = np.argsort(mz_ar_fast)
+            # mz_ar_fast = mz_ar_fast[idx]
+            # ion_mobility_ar_fast = ion_mobility_ar_fast[idx]
 
-            mz_ar = mz_ar[idx]
-            intensity_ar = intensity_ar[idx]
-            ion_mobility_ar = ion_mobility_ar[idx]
+            # mz_ar = mz_ar[idx]
+            # intensity_ar = intensity_ar[idx]
+            # ion_mobility_ar = ion_mobility_ar[idx]
 
-            max_peak_idx = len(mz_ar)
+            # max_peak_idx = len(mz_ar)
 
-            banned_idx = set()
+            # banned_idx = set()
 
-            peak_idx = 0
-            while peak_idx < max_peak_idx:
+            # peak_idx = 0
+            # while peak_idx < max_peak_idx:
 
-                if peak_idx not in banned_idx:
+            #     if peak_idx not in banned_idx:
 
-                    mass_accuracy_cur = mz_ar[peak_idx] * 1e-6 * args['itol']
+            #         mass_accuracy_cur = mz_ar[peak_idx] * 1e-6 * hill_mz_accuracy
 
-                    mz_val_int = mz_ar_fast[peak_idx]
-                    ion_mob_val_int = ion_mobility_ar_fast[peak_idx]
+            #         mz_val_int = mz_ar_fast[peak_idx]
+            #         ion_mob_val_int = ion_mobility_ar_fast[peak_idx]
 
-                    tmp = [peak_idx, ]
+            #         tmp = [peak_idx, ]
 
-                    peak_idx_2 = peak_idx + 1
+            #         peak_idx_2 = peak_idx + 1
 
-                    while peak_idx_2 < max_peak_idx:
+            #         while peak_idx_2 < max_peak_idx:
 
 
-                        if peak_idx_2 not in banned_idx:
+            #             if peak_idx_2 not in banned_idx:
 
-                            mz_val_int_2 = mz_ar_fast[peak_idx_2]
-                            if mz_val_int_2 - mz_val_int > 1:
-                                break
-                            elif abs(mz_ar[peak_idx]-mz_ar[peak_idx_2]) <= mass_accuracy_cur:
-                                ion_mob_val_int_2 = ion_mobility_ar_fast[peak_idx_2]
-                                if abs(ion_mob_val_int - ion_mob_val_int_2) <= 1:
-                                    tmp.append(peak_idx_2)
-                                    peak_idx = peak_idx_2
-                        peak_idx_2 += 1
+            #                 mz_val_int_2 = mz_ar_fast[peak_idx_2]
+            #                 if mz_val_int_2 - mz_val_int > 1:
+            #                     break
+            #                 elif abs(mz_ar[peak_idx]-mz_ar[peak_idx_2]) <= mass_accuracy_cur:
+            #                     ion_mob_val_int_2 = ion_mobility_ar_fast[peak_idx_2]
+            #                     if abs(ion_mob_val_int - ion_mob_val_int_2) <= 1:
+            #                         if abs(ion_mobility_ar[peak_idx] - ion_mobility_ar[peak_idx_2]) <= ion_mobility_accuracy:
+            #                             tmp.append(peak_idx_2)
+            #                             peak_idx = peak_idx_2
+            #             peak_idx_2 += 1
 
-                all_intensity = [intensity_ar[p_id] for p_id in tmp]
-                i_val_new = sum(all_intensity)
+            #     all_intensity = [intensity_ar[p_id] for p_id in tmp]
+            #     i_val_new = sum(all_intensity)
 
-                if i_val_new >= args['pasefmini'] and len(all_intensity) >= args['pasefminlh']:
+            #     if i_val_new >= pasefmini and len(all_intensity) >= pasefminlh:
 
-                    all_mz = [mz_ar[p_id] for p_id in tmp]
-                    all_ion_mob = [ion_mobility_ar[p_id] for p_id in tmp]
+            #         all_mz = [mz_ar[p_id] for p_id in tmp]
+            #         all_ion_mob = [ion_mobility_ar[p_id] for p_id in tmp]
 
-                    mz_val_new = np.average(all_mz, weights=all_intensity)
-                    ion_mob_new = np.average(all_ion_mob, weights=all_intensity)
+            #         mz_val_new = np.average(all_mz, weights=all_intensity)
+            #         ion_mob_new = np.average(all_ion_mob, weights=all_intensity)
 
-                    intensity_ar_new.append(i_val_new)
-                    mz_ar_new.append(mz_val_new)
-                    ion_mobility_ar_new.append(ion_mob_new)
+            #         intensity_ar_new.append(i_val_new)
+            #         mz_ar_new.append(mz_val_new)
+            #         ion_mobility_ar_new.append(ion_mob_new)
 
-                    banned_idx.update(tmp)
+            #         banned_idx.update(tmp)
 
-                peak_idx += 1
+            #     peak_idx += 1
+
+            mz_ar_new, intensity_ar_new, ion_mobility_ar_new = centroid_pasef_scan(z, mz_step, hill_mz_accuracy, ion_mobility_accuracy, pasefmini, pasefminlh)
 
             data_for_analyse_tmp[spec_idx]['m/z array'] = np.array(mz_ar_new)
             data_for_analyse_tmp[spec_idx]['intensity array'] = np.array(intensity_ar_new)
             data_for_analyse_tmp[spec_idx]['mean inverse reduced ion mobility array'] = np.array(ion_mobility_ar_new)
 
-        logger.info('number of m/z peaks in scan after centroiding: %d', len(data_for_analyse_tmp[spec_idx]['m/z array']))
+        logger.debug('number of m/z peaks in scan after centroiding: %d', len(data_for_analyse_tmp[spec_idx]['m/z array']))
 
     data_for_analyse_tmp = [z for z in data_for_analyse_tmp if len(z['m/z array'] > 0)]
     logger.info('Number of MS1 scans after combining ion mobility peaks: %d', len(data_for_analyse_tmp))
-
-            # fast_dict = defaultdict(set)
-            # for peak_idx, (mz_val_int, ion_mob_val_int) in enumerate(zip(mz_ar_fast, ion_mobility_ar_fast)):
-
-            #     fast_dict[(mz_val_int-1, ion_mob_val_int)].add(peak_idx)
-            #     fast_dict[(mz_val_int, ion_mob_val_int)].add(peak_idx)
-            #     fast_dict[(mz_val_int+1, ion_mob_val_int)].add(peak_idx)
-
-            #     fast_dict[(mz_val_int-1, ion_mob_val_int-1)].add(peak_idx)
-            #     fast_dict[(mz_val_int, ion_mob_val_int-1)].add(peak_idx)
-            #     fast_dict[(mz_val_int+1, ion_mob_val_int-1)].add(peak_idx)
-
-            #     fast_dict[(mz_val_int-1, ion_mob_val_int+1)].add(peak_idx)
-            #     fast_dict[(mz_val_int, ion_mob_val_int+1)].add(peak_idx)
-            #     fast_dict[(mz_val_int+1, ion_mob_val_int+1)].add(peak_idx)
-
-
-    #         print('HERE2')
-
-    #         hill_length = []
-    #         peak_idx_array = []
-    #         for peak_idx, (mz_val_int, ion_mob_val_int) in enumerate(zip(mz_ar_fast, ion_mobility_ar_fast)):
-    #             hill_length.append(len(fast_dict[(mz_val_int, ion_mob_val_int)]))
-    #             peak_idx_array.append(peak_idx)
-    #         peak_idx_array = np.array(peak_idx_array)
-
-
-    #         print('HERE3')
-
-    #         added_idx = set()
-    #         idx_sort = np.argsort(hill_length)[::-1]
-    #         for peak_idx in peak_idx_array[idx_sort]:
-    #             if peak_idx not in added_idx:
-    #                 mz_val_int = mz_ar_fast[peak_idx]
-    #                 ion_mob_val_int = ion_mobility_ar_fast[peak_idx]
-    #                 all_idx = set([p_id for p_id in fast_dict[(mz_val_int, ion_mob_val_int)] if p_id not in added_idx])
-    #                 if len(all_idx):
-    #                     added_idx.update(all_idx)
-
-    #                     all_intensity = [intensity_ar[p_id] for p_id in all_idx]
-    #                     i_val_new = sum(all_intensity)
-
-    #                     if i_val_new >= args['pasefmini']:
-
-    #                         all_mz = [mz_ar[p_id] for p_id in all_idx]
-    #                         all_ion_mob = [ion_mobility_ar[p_id] for p_id in all_idx]
-
-    #                         mz_val_new = np.average(all_mz, weights=all_intensity)
-    #                         ion_mob_new = np.average(all_ion_mob, weights=all_intensity)
-
-    #                         intensity_ar_new.append(i_val_new)
-    #                         mz_ar_new.append(mz_val_new)
-    #                         ion_mobility_ar_new.append(ion_mob_new)
-
-    #         data_for_analyse_tmp[spec_idx]['m/z array'] = np.array(mz_ar_new)
-    #         data_for_analyse_tmp[spec_idx]['intensity array'] = np.array(intensity_ar_new)
-    #         data_for_analyse_tmp[spec_idx]['mean inverse reduced ion mobility array'] = np.array(ion_mobility_ar_new)
-
-    # data_for_analyse_tmp = [z for z in data_for_analyse_tmp if len(z['m/z array'] > 0)]
-    # print('Number of MS1 scans after combining ion mobility peaks: ', len(data_for_analyse_tmp))
 
     return data_for_analyse_tmp
 
