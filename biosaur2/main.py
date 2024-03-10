@@ -130,9 +130,9 @@ def split_peaks_multi(hills_dict, data_for_analyse_tmp, args):
 
     return hills_dict
 
-def get_initial_isotopes_python(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, sorted_idx_child_process, qout, win_sys=False):
+def get_initial_isotopes_python(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, ivf, sorted_idx_child_process, qout, win_sys=False):
 
-    ready_local = get_initial_isotopes(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, sorted_idx_child_process)
+    ready_local = get_initial_isotopes(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, ivf, sorted_idx_child_process)
     if win_sys:
         return ready_local
     else:
@@ -218,11 +218,13 @@ def process_file(args):
                 round(float(i) / averagine_mass * averagine_C),
                 0.0107
             )
+            max_pos = np.argmax(int_arr)
             int_arr_norm = int_arr / int_arr.sum()
-            a[i] = int_arr_norm
+            a[i] = (int_arr_norm, max_pos)
 
         min_charge = args['cmin']
         max_charge = args['cmax']
+        ivf = args['ivf']
 
         n_procs = args['nprocs']
 
@@ -235,7 +237,7 @@ def process_file(args):
             sorted_idx_full = [idx_1 for (idx_1, hill_idx_1), hill_mz_1 in sorted(list(zip(list(enumerate(hills_dict['hills_idx_array_unique'])), hills_dict['hills_mz_median'])), key=lambda x: x[-1])]
             sorted_idx_child_process = sorted_idx_full
 
-            qout = get_initial_isotopes_python(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, list(sorted_idx_child_process), qout, win_sys=True)
+            qout = get_initial_isotopes_python(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, ivf, list(sorted_idx_child_process), qout, win_sys=True)
 
             # for i in range(n_procs):
             #     sorted_idx_child_process = sorted_idx_full[i*step:i*step+step]
@@ -268,7 +270,7 @@ def process_file(args):
 
                 p = Process(
                     target=get_initial_isotopes_python,
-                    args=(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, list(sorted_idx_child_process), qout))
+                    args=(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, ivf, list(sorted_idx_child_process), qout))
                 p.start()
                 procs.append(p)
 
@@ -281,53 +283,67 @@ def process_file(args):
 
         logger.info('Number of potential isotope clusters: %d', len(ready))
 
-        isotopes_mass_error_map = {}
-        for ic in range(1, 10, 1):
-            isotopes_mass_error_map[ic] = []
+        if args['ignore_iso_calib']:
+            isotopes_mass_error_map = {}
+            for ic in range(1, 10, 1):
+                isotopes_mass_error_map[ic] = [0, args['itol']]
+        else:
 
-        for i in range(9):
-            tmp = []
-            for pf in ready:
-                isotopes = pf['isotopes']
-                scans = pf['nScans']
-                if len(isotopes) >= i + 1 and scans >= 3:
-                    tmp.append(isotopes[i]['mass_diff_ppm'])
-            isotopes_mass_error_map[i+1] = tmp
+            isotopes_mass_error_map = {}
+            for ic in range(1, 10, 1):
+                isotopes_mass_error_map[ic] = []
 
-        for ic in range(1, 10, 1):
-            if ic == 1:
+            for i in range(9):
+                tmp = []
+                for pf in ready:
+                    isotopes = pf['isotopes']
+                    scans = pf['nScans']
+                    if len(isotopes) >= i + 1 and scans >= 3:
+                        tmp.append(isotopes[i]['mass_diff_ppm'])
+                isotopes_mass_error_map[i+1] = tmp
 
-                if len(isotopes_mass_error_map[ic]) >= 1000:
+            for ic in range(1, 10, 1):
+                if ic <= 3:
 
-                    try:
+                    if len(isotopes_mass_error_map[ic]) >= 1000:
 
-                        true_md = np.array(isotopes_mass_error_map[ic])
+                        try:
 
-                        mass_left = -min(isotopes_mass_error_map[ic])
-                        mass_right = max(isotopes_mass_error_map[ic])
+                            true_md = np.array(isotopes_mass_error_map[ic])
+
+                            mass_left = -min(isotopes_mass_error_map[ic])
+                            mass_right = max(isotopes_mass_error_map[ic])
 
 
-                        mass_shift, mass_sigma, covvalue = utils.calibrate_mass(0.05, mass_left, mass_right, true_md)
-                        if abs(mass_shift) >= max(mass_left, mass_right):
-                            mass_shift, mass_sigma, covvalue = utils.calibrate_mass(0.25, mass_left, mass_right, true_md)
-                        if np.isinf(covvalue):
                             mass_shift, mass_sigma, covvalue = utils.calibrate_mass(0.05, mass_left, mass_right, true_md)
+                            if abs(mass_shift) >= max(mass_left, mass_right):
+                                mass_shift, mass_sigma, covvalue = utils.calibrate_mass(0.25, mass_left, mass_right, true_md)
+                            if np.isinf(covvalue):
+                                mass_shift, mass_sigma, covvalue = utils.calibrate_mass(0.05, mass_left, mass_right, true_md)
 
-                        isotopes_mass_error_map[ic] = [mass_shift, mass_sigma]
+                            isotopes_mass_error_map[ic] = [mass_shift, mass_sigma]
 
-                    except:
-                        isotopes_mass_error_map[ic] = [0, 10]
+                        except:
+                            isotopes_mass_error_map[ic] = [0, 10]
+
+                    else:
+                        if ic -1 in isotopes_mass_error_map:
+                            isotopes_mass_error_map[ic] = deepcopy(isotopes_mass_error_map[ic-1])
+                            isotopes_mass_error_map[ic][0] += isotopes_mass_error_map[ic-1][0] - isotopes_mass_error_map.get(ic-2, [0, ])[0]
+                            isotopes_mass_error_map[ic][1] *= isotopes_mass_error_map[ic-1][1] / isotopes_mass_error_map.get(ic-2, isotopes_mass_error_map[ic-1])[1]
+
+                        else:
+                            isotopes_mass_error_map[ic] = [0, 10]
 
                 else:
-                    isotopes_mass_error_map[ic] = [0, 10]
-
-            else:
-                isotopes_mass_error_map[ic] = deepcopy(isotopes_mass_error_map[ic-1])
-                isotopes_mass_error_map[ic][0] = isotopes_mass_error_map[ic][0] - 0.45
+                    isotopes_mass_error_map[ic] = deepcopy(isotopes_mass_error_map[ic-1])
+                    isotopes_mass_error_map[ic][0] += isotopes_mass_error_map[ic-1][0] - isotopes_mass_error_map.get(ic-2, [0, ])[0]
+                    isotopes_mass_error_map[ic][1] *= isotopes_mass_error_map[ic-1][1] / isotopes_mass_error_map.get(ic-2, isotopes_mass_error_map[ic-1])[1]
 
         logger.info('Average mass shift between monoisotopic and first 13C isotope: %.3f ppm', isotopes_mass_error_map[1][0])
         logger.info('Average mass std between monoisotopic and first 13C isotope: %.3f ppm', isotopes_mass_error_map[1][1])
 
+        logger.debug(isotopes_mass_error_map)
 
         max_l = len(ready)
         cur_l = 0
@@ -339,6 +355,7 @@ def process_file(args):
 
             for cand in pep_feature['isotopes']:
                 map_val = isotopes_mass_error_map[cand['isotope_number']]
+
                 if abs(cand['mass_diff_ppm'] - map_val[0]) <= 5 * map_val[1]:
                     tmp.append(cand)
                 else:
@@ -395,26 +412,21 @@ def process_file(args):
         cur_isotopes = ready[0]['nIsotopes']
 
 
-        cnt_mark = 0
-
         while cur_l < max_l:
-            cnt_mark += 1
             pep_feature = ready[cur_l]
             n_iso = pep_feature['nIsotopes']
             if n_iso < cur_isotopes:
                 ready = sorted(ready, key=func_for_sort)
                 cur_isotopes = n_iso
                 cur_l = 0
+                pep_feature = ready[cur_l]
 
             if pep_feature['monoisotope hill idx'] not in ready_set:
                 if not any(cand['isotope_hill_idx'] in ready_set for cand in pep_feature['isotopes']):
-                # if not any(ready_set[cand['isotope_hill_idx']]>1 for cand in pep_feature['isotopes']):
                     ready_final.append(pep_feature)
                     ready_set.add(pep_feature['monoisotope hill idx'])
-                    # ready_set[pep_feature['monoisotope hill idx']] += 1
                     for cand in pep_feature['isotopes']:
                         ready_set.add(cand['isotope_hill_idx'])
-                        # ready_set[cand['isotope_hill_idx']] += 1
                     del ready[cur_l]
                     max_l -= 1
                     cur_l -= 1
@@ -432,16 +444,17 @@ def process_file(args):
                     tmp_n_isotopes = len(tmp)
 
                     if tmp_n_isotopes:
+
                         all_theoretical_int, all_exp_intensity = pep_feature['intensity_array_for_cos_corr']
                         all_theoretical_int = all_theoretical_int[:tmp_n_isotopes+1]
                         all_exp_intensity = all_exp_intensity[:tmp_n_isotopes+1]
                         cos_corr, number_of_passed_isotopes = checking_cos_correlation_for_carbon(all_theoretical_int, all_exp_intensity, 0.6)
                         if cos_corr:
-
                             ready[cur_l]['cos_cor_isotopes'] = cos_corr
                             ready[cur_l]['isotopes'] = tmp
                             ready[cur_l]['nIsotopes'] = tmp_n_isotopes + 1
                             ready[cur_l]['intensity_array_for_cos_corr'] = [all_theoretical_int, all_exp_intensity]
+                            cur_l -= 1
                             # ready[cur_l]['sumI'] = np.log10(sum(all_exp_intensity))
                             # ready[cur_l]['mass_diff_ppm_abs'] = abs(ready[cur_l]['isotopes'][0]['mass_diff_ppm'])
 

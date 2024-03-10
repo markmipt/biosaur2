@@ -81,13 +81,14 @@ def cos_correlation(set hill_scans_1, dict hill_idict_1, float hill_sqrt_of_i_1,
 @cython.cdivision(True)
 @cython.boundscheck(False)
 @cython.wraparound(True)
-def get_initial_isotopes(dict hills_dict, float isotopes_mass_accuracy, list isotopes_list, dict a, int min_charge, int max_charge, float mz_step, float paseftol, float faims_val, list sorted_idx_child_process):
+def get_initial_isotopes(dict hills_dict, float isotopes_mass_accuracy, list isotopes_list, dict a, int min_charge, int max_charge, float mz_step, float paseftol, float faims_val, float ivf, list sorted_idx_child_process):
 
     cdef list ready, charges, hill_scans_1_list, hill_scans_2_list, candidates, tmp_candidates
     cdef int idx_1, hill_idx_1, idx_2, hill_idx_2, im_to_check_fast, hill_scans_1_list_first, hill_scans_1_list_last
-    cdef int hill_scans_2_list_first, hill_scans_2_list_last, charge, isotope_number, m_to_check_fast
+    cdef int hill_scans_2_list_first, hill_scans_2_list_last, charge, isotope_number, m_to_check_fast, max_pos, i_local_isotope
     cdef float im_mz_1, hill_mz_1, im_mz_2, hill_mz_2, m_to_check, mass_diff_abs, cos_cor_RT
-    cdef float hill_sqrt_of_i_1, hill_sqrt_of_i_2
+    cdef float hill_sqrt_of_i_1, hill_sqrt_of_i_2, local_minimum, hill_intensity_apex_1, hill_intensity_apex_2
+    cdef double mass_diff_ppm
     cdef dict banned_charges, hill_idict_1, hill_idict_2, local_isotopes_dict
     cdef set hill_scans_1, hill_scans_2
 
@@ -150,12 +151,14 @@ def get_initial_isotopes(dict hills_dict, float isotopes_mass_accuracy, list iso
                                         hills_dict, _, _ = get_and_calc_apex_intensity_and_scan(hills_dict, idx_1)
                                         hills_dict, _, _ = get_and_calc_apex_intensity_and_scan(hills_dict, idx_2)
 
+                                        mass_diff_ppm = mass_diff_abs*1e6/m_to_check
+
                                         local_isotopes_dict = {
                                             'isotope_number': isotope_number,
                                             'isotope_hill_idx': hill_idx_2,
                                             'isotope_idx': idx_2,
                                             'cos_cor': cos_cor_RT,
-                                            'mass_diff_ppm': mass_diff_abs/m_to_check*1e6,
+                                            'mass_diff_ppm': mass_diff_ppm,
                                         }
 
                                         tmp_candidates.append(local_isotopes_dict)
@@ -174,7 +177,9 @@ def get_initial_isotopes(dict hills_dict, float isotopes_mass_accuracy, list iso
 
                 neutral_mass = hill_mz_1 * charge
 
-                tmp_intensity = a[int(100 * (neutral_mass // 100))]
+                tmp_intensity, max_pos = a[int(100 * (neutral_mass // 100))]
+                if max_pos < 4:
+                    max_pos = 4
 
                 _, hill_intensity_apex_1, hill_scan_apex_1 = get_and_calc_apex_intensity_and_scan(hills_dict, idx_1)
                 mono_hills_scan_lists =  hills_dict['hills_scan_lists'][idx_1]
@@ -189,13 +194,25 @@ def get_initial_isotopes(dict hills_dict, float isotopes_mass_accuracy, list iso
 
                     all_exp_intensity = [hill_intensity_apex_1, ]
 
+                    i_local_isotope = 1
+
                     for local_isotopes_dict in iter_candidates:
 
                         idx_2 = local_isotopes_dict['isotope_idx']
 
                         _, hill_intensity_apex_2, hill_scan_apex_2 = get_and_calc_apex_intensity_and_scan(hills_dict, idx_2)
                         
+                        if i_local_isotope > max_pos:
+                            if i_local_isotope == max_pos + 1 or hill_intensity_apex_2 < local_minimum:
+                                local_minimum = hill_intensity_apex_2
+                                local_minimum_pos = i_local_isotope
+                            if hill_intensity_apex_2 >= ivf * local_minimum:
+                                all_exp_intensity = all_exp_intensity[:local_minimum_pos+1]
+                                break
+
                         all_exp_intensity.append(hill_intensity_apex_2)
+                        i_local_isotope += 1
+
                     cos_corr, number_of_passed_isotopes = checking_cos_correlation_for_carbon(all_theoretical_int, all_exp_intensity, 0.6)
 
                     if cos_corr:
@@ -309,6 +326,111 @@ def meanfilt(list data, int window_width):
     cumsum_vec[window_width:] = cumsum_vec[window_width:] - cumsum_vec[:-window_width]
     ma_vec = data[:1] + list(cumsum_vec / window_width) + data[-1:]
     return ma_vec
+
+
+@cython.cdivision(True)
+@cython.boundscheck(False)
+@cython.wraparound(True)
+def centroid_pasef_scan(dict scandict, float mz_step, float hill_mz_accuracy, float ion_mobility_accuracy, float pasefmini, int pasefminlh):
+    cdef np.ndarray mz_ar, intensity_ar, ion_mobility_ar, ion_mobility_ar_fast, mz_ar_fast
+    cdef list mz_ar_new, intensity_ar_new, ion_mobility_ar_new, tmp, all_intensity, all_mz, all_ion_mob
+    cdef float ion_mobility_step, mass_accuracy_cur, i_val_new, mz_val_new, ion_mob_new
+    cdef int max_peak_idx, peak_idx, mz_val_int, ion_mob_val_int, peak_idx_2, mz_val_int_2, ion_mob_val_int_2, l_new
+    cdef set banned_idx
+
+    mz_ar_new = []
+    intensity_ar_new = []
+    ion_mobility_ar_new = []
+
+    mz_ar = scandict['m/z array']
+    intensity_ar = scandict['intensity array']
+    ion_mobility_ar = scandict['mean inverse reduced ion mobility array']
+
+    ion_mobility_step = max(ion_mobility_ar) * ion_mobility_accuracy
+
+    ion_mobility_ar_fast = (ion_mobility_ar/ion_mobility_step).astype(int)
+    mz_ar_fast = (mz_ar/mz_step).astype(int)
+
+    idx = np.argsort(mz_ar_fast)
+    mz_ar_fast = mz_ar_fast[idx]
+    ion_mobility_ar_fast = ion_mobility_ar_fast[idx]
+
+    mz_ar = mz_ar[idx]
+    intensity_ar = intensity_ar[idx]
+    ion_mobility_ar = ion_mobility_ar[idx]
+
+    max_peak_idx = len(mz_ar)
+
+    banned_idx = set()
+
+    peak_idx = 0
+    while peak_idx < max_peak_idx:
+
+        if peak_idx not in banned_idx:
+
+            mass_accuracy_cur = mz_ar[peak_idx] * 1e-6 * hill_mz_accuracy
+
+            mz_val_int = mz_ar_fast[peak_idx]
+            ion_mob_val_int = ion_mobility_ar_fast[peak_idx]
+
+            tmp = [peak_idx, ]
+
+            peak_idx_2 = peak_idx + 1
+
+            while peak_idx_2 < max_peak_idx:
+
+
+                if peak_idx_2 not in banned_idx:
+
+                    mz_val_int_2 = mz_ar_fast[peak_idx_2]
+                    if mz_val_int_2 - mz_val_int > 1:
+                        break
+                    elif abs(mz_ar[peak_idx]-mz_ar[peak_idx_2]) <= mass_accuracy_cur:
+                        ion_mob_val_int_2 = ion_mobility_ar_fast[peak_idx_2]
+                        if abs(ion_mob_val_int - ion_mob_val_int_2) <= 1:
+                            if abs(ion_mobility_ar[peak_idx] - ion_mobility_ar[peak_idx_2]) <= ion_mobility_accuracy:
+                                tmp.append(peak_idx_2)
+                                peak_idx = peak_idx_2
+                peak_idx_2 += 1
+
+        l_new = len(tmp)
+        if l_new >= pasefminlh:
+
+            if l_new == 1:
+                i_val_new = intensity_ar[peak_idx]
+                if i_val_new >= pasefmini:
+                    mz_val_new = mz_ar[peak_idx]
+                    ion_mob_new = ion_mobility_ar[peak_idx]
+
+                    intensity_ar_new.append(i_val_new)
+                    mz_ar_new.append(mz_val_new)
+                    ion_mobility_ar_new.append(ion_mob_new)
+
+                    banned_idx.add(peak_idx)
+
+            else:
+
+                all_intensity = [intensity_ar[p_id] for p_id in tmp]
+                i_val_new = sum(all_intensity)
+
+                if i_val_new >= pasefmini:
+
+                    all_mz = [mz_ar[p_id] for p_id in tmp]
+                    all_ion_mob = [ion_mobility_ar[p_id] for p_id in tmp]
+
+                    mz_val_new = np.average(all_mz, weights=all_intensity)
+                    ion_mob_new = np.average(all_ion_mob, weights=all_intensity)
+
+                    intensity_ar_new.append(i_val_new)
+                    mz_ar_new.append(mz_val_new)
+                    ion_mobility_ar_new.append(ion_mob_new)
+
+                    banned_idx.update(tmp)
+
+        peak_idx += 1
+
+
+    return mz_ar_new, intensity_ar_new, ion_mobility_ar_new
 
 
 @cython.cdivision(True)
