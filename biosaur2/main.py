@@ -479,7 +479,8 @@ def process_file(args):
 
 
         negative_mode = args['nm']
-        peptide_features = utils.calc_peptide_features(hills_dict, ready_final, negative_mode, faims_val, RT_dict, data_start_id)
+        isotopes_for_intensity = args['iuse']
+        peptide_features = utils.calc_peptide_features(hills_dict, ready_final, negative_mode, faims_val, RT_dict, data_start_id, isotopes_for_intensity)
 
         utils.write_output(peptide_features, args, write_header)
 

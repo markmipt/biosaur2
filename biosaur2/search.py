@@ -27,6 +27,7 @@ def run():
     parser.add_argument('-paseftol', help='ion mobility accuracy for hills', default=0.05, type=float)
     parser.add_argument('-nm', help='negative mode. 1-true, 0-false', default=0, type=int)
     parser.add_argument('-o', help='path to output features file', default='')
+    parser.add_argument('-iuse', help='Number of isotopes used for intensity calucation. 0 - only mono, -1 - use all, 1 - use mono and first isotope, etc.', default=0, type=int)
     parser.add_argument('-hvf', help='Threshold to split hills into multiple if local minimum intensity multiplied by hvf is less than both surrounding local maximums', default=1.3, type=float)
     parser.add_argument('-ivf', help='Threshold to split isotope pattern into multiple features if local minimum intensity multiplied by ivf is less right local maximum', default=5.0, type=float)
     # parser.add_argument('-fdr', help='protein fdr filter in %%', default=1.0, type=float)

@@ -51,7 +51,7 @@ def process_hills_extra(hills_dict, RT_dict, faims_val, data_start_id):
     return hills_dict, hills_features
 
 
-def calc_peptide_features(hills_dict, peptide_features, negative_mode, faims_val, RT_dict, data_start_id):
+def calc_peptide_features(hills_dict, peptide_features, negative_mode, faims_val, RT_dict, data_start_id, isotopes_for_intensity):
 
     for pep_feature in peptide_features:
 
@@ -63,11 +63,24 @@ def calc_peptide_features(hills_dict, peptide_features, negative_mode, faims_val
         pep_feature['massCalib'] = pep_feature['mz'] * pep_feature['charge'] - 1.0072765 * pep_feature['charge'] * (-1 if negative_mode else 1)
 
         hills_dict, _, _ = get_and_calc_apex_intensity_and_scan(hills_dict, pep_feature['monoisotope idx'])
+        pep_feature['intensityApex'] = hills_dict['hills_intensity_apex'][pep_feature['monoisotope idx']]
+        pep_feature['intensitySum'] = sum(hills_dict['hills_intensity_array'][pep_feature['monoisotope idx']])
+
+        if isotopes_for_intensity != 0:
+            idx_cur = 0
+            for cand in pep_feature['isotopes']:
+                idx_cur += 1
+                if idx_cur == isotopes_for_intensity + 1:
+                    break
+                else:
+                    iso_idx = cand['isotope_hill_idx']
+                    hills_dict, _, _ = get_and_calc_apex_intensity_and_scan(hills_dict, iso_idx)
+                    pep_feature['intensityApex'] += hills_dict['hills_intensity_apex'][iso_idx]
+                    pep_feature['intensitySum'] += sum(hills_dict['hills_intensity_array'][iso_idx])
+                
 
         pep_feature['scanApex'] = hills_dict['hills_scan_apex'][pep_feature['monoisotope idx']]
         pep_feature['rtApex'] = RT_dict[hills_dict['hills_scan_apex'][pep_feature['monoisotope idx']]+data_start_id]
-        pep_feature['intensityApex'] = hills_dict['hills_intensity_apex'][pep_feature['monoisotope idx']]
-        pep_feature['intensitySum'] = sum(hills_dict['hills_intensity_array'][pep_feature['monoisotope idx']])
         pep_feature['rtStart'] = RT_dict[hills_dict['hills_scan_lists'][pep_feature['monoisotope idx']][0]+data_start_id]
         pep_feature['rtEnd'] = RT_dict[hills_dict['hills_scan_lists'][pep_feature['monoisotope idx']][-1]+data_start_id]
         pep_feature['mono_hills_scan_lists'] = hills_dict['hills_scan_lists'][pep_feature['monoisotope idx']]
