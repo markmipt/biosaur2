@@ -77,7 +77,7 @@ def calc_peptide_features(hills_dict, peptide_features, negative_mode, faims_val
                 if idx_cur == isotopes_for_intensity + 1:
                     break
                 else:
-                    iso_idx = cand['isotope_hill_idx']
+                    iso_idx = cand['isotope_idx']
                     hills_dict, _, _ = get_and_calc_apex_intensity_and_scan(hills_dict, iso_idx)
                     pep_feature['intensityApex'] += hills_dict['hills_intensity_apex'][iso_idx]
                     pep_feature['intensitySum'] += sum(hills_dict['hills_intensity_array'][iso_idx])
