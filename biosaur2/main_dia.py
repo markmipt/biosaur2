@@ -6,6 +6,7 @@ import ast
 import math
 import logging
 from .cutils import get_initial_isotopes, checking_cos_correlation_for_carbon, split_peaks, split_peaks_old, detect_hills, process_hills, get_and_calc_values_for_cos_corr, cos_correlation, get_and_calc_apex_intensity_and_scan
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,8 @@ def process_file(args):
 
     df1_features['hill_idict_1'] = df1_features.apply(calc_idict, axis=1)
     df1_features['hill_sqrt_of_i_1'] = df1_features.apply(calc_sqrt_of_i, axis=1)
+
+    df1_features = df1_features.sort_values(by='rtEnd').reset_index(drop=True)
 
     logger.debug(df1_features.head())
 
@@ -102,6 +105,7 @@ def process_file(args):
             args['paseftol'] = False
 
         paseftol = args['paseftol']
+        diadynrange = args['diadynrange']
 
         hills_dict = detect_hills(data_for_analyse_tmp, args, mz_step, paseftol, dia=True)
 
@@ -115,56 +119,88 @@ def process_file(args):
         logger.info('All data converted to %d hills...', num_hills)
 
 
+        all_hills_idx = list(range(len(hills_dict['hills_idx_array_unique'])))
+        # for idx_2 in all_hills_idx:
+        #     hills_dict, _, _ = get_and_calc_apex_intensity_and_scan(hills_dict, idx_2)
+        # idx_sorted_by_intensity = np.argsort(hills_dict['hills_intensity_apex'])[::-1]
+        idx_sorted_by_rt_start = np.argsort([hills_dict['hills_scan_lists'][idx_2][0] for idx_2 in all_hills_idx])
+        last_scans_ms2 = np.array([hills_dict['hills_scan_lists'][idx_2][-1] for idx_2 in all_hills_idx])[idx_sorted_by_rt_start]
+
+        diaminlh = int(args['diaminlh'])
+
+        logger.info('All Apexes are calculated')
+
         if num_hills:
 
-            mz_tol = isolation_window
+            df1_features_in_window = df1_features[df1_features['mz'].apply(lambda x: window_val - isolation_window <= x <= window_val + isolation_window)]
 
-            cnt_tmp = 0
-            for ms1_mz, ms1_I, ms1_RT, ms1_ch, hill_scans_1, hill_scans_1_list, ms1_intensities, hill_idict_1, hill_sqrt_of_i_1 in df1_features[['mz', 'intensityApex', 'rtApex','charge', 'mono_hills_scan_sets', 'mono_hills_scan_lists', 'mono_hills_intensity_list', 'hill_idict_1', 'hill_sqrt_of_i_1']].values:
+
+            for ms1_mz, ms1_I, ms1_RT, ms1_ch, hill_scans_1, hill_scans_1_list, ms1_intensities, hill_idict_1, hill_sqrt_of_i_1 in df1_features_in_window[['mz', 'intensityApex', 'rtApex','charge', 'mono_hills_scan_sets', 'mono_hills_scan_lists', 'mono_hills_intensity_list', 'hill_idict_1', 'hill_sqrt_of_i_1']].values:
+
+
+
+                # if window_val - isolation_window <= ms1_mz <= window_val + isolation_window:
+
 
                 hill_scans_1_list_first, hill_scans_1_list_last = hill_scans_1_list[0], hill_scans_1_list[-1]
 
-                cnt_tmp += 1
                 tmp_candidates = []
+                intensity_threshold = 0
 
-                if window_val - isolation_window <= ms1_mz <= window_val + isolation_window:
+                # start_pos = 0
+                # for start_pos in last_scans_ms2:
 
-                    for idx_2, hill_idx_2 in enumerate(hills_dict['hills_idx_array_unique']):
-                    # for idx_2 in hills_dict['hills_mz_median_fast_dict'][m_to_check_fast]:
+                # for idx_2, hill_idx_2 in enumerate(hills_dict['hills_idx_array_unique']):
+                # for idx_2 in idx_sorted_by_intensity:
+                for idx_2 in idx_sorted_by_rt_start[last_scans_ms2 >= hill_scans_1_list_first]:
 
-                        # if paseftol is False or idx_2 in hills_dict['hills_im_median_fast_dict'][im_to_check_fast]:
+                    hill_scans_2_list = hills_dict['hills_scan_lists'][idx_2]
+                    hill_scans_2_list_first, hill_scans_2_list_last = hill_scans_2_list[0], hill_scans_2_list[-1]
 
-                            # series_2 = idx_2
+                    # if hill_scans_2_list_last < hill_scans_1_list_first:
+                    #     pass
 
-                        hill_scans_2_list = hills_dict['hills_scan_lists'][idx_2]
-                        hill_scans_2_list_first, hill_scans_2_list_last = hill_scans_2_list[0], hill_scans_2_list[-1]
+                    if hill_scans_1_list_last < hill_scans_2_list_first:
+                        break
+                # for idx_2 in hills_dict['hills_mz_median_fast_dict'][m_to_check_fast]:
 
-                        if not hill_scans_1_list_last < hill_scans_2_list_first and not hill_scans_2_list_last < hill_scans_1_list_first:
-                            hill_scans_2 = hills_dict['hills_scan_sets'][idx_2]
-                            if len(hill_scans_1.intersection(hill_scans_2)) >= 1:
+                    # if paseftol is False or idx_2 in hills_dict['hills_im_median_fast_dict'][im_to_check_fast]:
+
+                        # series_2 = idx_2
+
+                    # if diadynrange and intensity_threshold:
+                    #     if hills_dict['hills_intensity_apex'][idx_2] < intensity_threshold:
+                    #         break
+
+                    # if not hill_scans_1_list_last < hill_scans_2_list_first and not hill_scans_2_list_last < hill_scans_1_list_first:
+                    hill_scans_2 = hills_dict['hills_scan_sets'][idx_2]
+                    if len(hill_scans_1.intersection(hill_scans_2)) >= diaminlh:
 
 
-                                hills_dict, hill_idict_2, hill_sqrt_of_i_2 = get_and_calc_values_for_cos_corr(hills_dict, idx_2)
+                        hills_dict, hill_idict_2, hill_sqrt_of_i_2 = get_and_calc_values_for_cos_corr(hills_dict, idx_2)
 
 
-                                # cos_cor_RT = 1.0
-                                cos_cor_RT = cos_correlation(hill_scans_1, hill_idict_1, hill_sqrt_of_i_1, hill_scans_2, hill_idict_2, hill_sqrt_of_i_2)
+                        # cos_cor_RT = 1.0
+                        cos_cor_RT = cos_correlation(hill_scans_1, hill_idict_1, hill_sqrt_of_i_1, hill_scans_2, hill_idict_2, hill_sqrt_of_i_2)
 
 
-                                if cos_cor_RT >= 0.6:
+                        if cos_cor_RT >= 0.6:
 
-                                    hill_mz_2 = hills_dict['hills_mz_median'][idx_2]
+                            hill_mz_2 = hills_dict['hills_mz_median'][idx_2]
 
-                                    # hill_idx_2 = hills_dict['hills_idx_array_unique'][idx_2]
+                            # hill_idx_2 = hills_dict['hills_idx_array_unique'][idx_2]
 
-                                    hills_dict, _, _ = get_and_calc_apex_intensity_and_scan(hills_dict, idx_2)
+                            hills_dict, _, _ = get_and_calc_apex_intensity_and_scan(hills_dict, idx_2)
 
-                                    local_isotopes_dict = {
-                                        'm/z': hill_mz_2,
-                                        'intensity': hills_dict['hills_intensity_apex'][idx_2],
-                                    }
+                            local_isotopes_dict = {
+                                'm/z': hill_mz_2,
+                                'intensity': hills_dict['hills_intensity_apex'][idx_2],
+                            }
 
-                                    tmp_candidates.append(local_isotopes_dict)
+                            # if diadynrange and not intensity_threshold:
+                            #     intensity_threshold = hills_dict['hills_intensity_apex'][idx_2] / diadynrange
+
+                            tmp_candidates.append(local_isotopes_dict)
 
                 if len(tmp_candidates):
                     outmgf.write('BEGIN IONS\n')

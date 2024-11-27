@@ -55,6 +55,7 @@ def run():
     parser.add_argument('-dia',  help='create mgf file for DIA MS/MS. Experimental', action='store_true')
     parser.add_argument('-diahtol', help='mass accuracy for DIA hills in ppm', default=25, type=float)
     parser.add_argument('-diaminlh', help='minimum length for dia hill', default=1, type=int)
+    parser.add_argument('-diadynrange', help='diadynrange', default=1000, type=int)
     parser.add_argument('-mgf', help='path to output mgf file', default='')
     parser.add_argument('-debug', help='log debugging information', action='store_true')
     parser.add_argument('-tof', help='smart tof processing. Experimental', action='store_true')
