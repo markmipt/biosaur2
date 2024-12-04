@@ -57,7 +57,7 @@ def process_file(args):
     t_i = 1
 
 
-    data_for_analyse = utils.process_mzml_dia(args)
+    data_for_analyse, ms1_count, ms2_count = utils.process_mzml_dia(args)
 
     isolation_target_func = lambda x: x['precursorList']['precursor'][0]['isolationWindow']['isolation window target m/z']
     isolation_window_func = lambda x: x['precursorList']['precursor'][0]['isolationWindow']['isolation window lower offset']
@@ -70,6 +70,9 @@ def process_file(args):
     #Process windows
     windows_set = set([isolation_target_func(z) for z in data_for_analyse])
     logger.info('Detected windows values: %s', windows_set)
+
+    ms1_to_ms2_in_cycle_koef = int(ms1_count / (ms2_count / len(windows_set)))
+    logging.info('MS1 to MS2 scans ratio per full cycle: %d', ms1_to_ms2_in_cycle_koef)
 
     RT_dict = dict()
 
@@ -141,6 +144,14 @@ def process_file(args):
 
                 # if window_val - isolation_window <= ms1_mz <= window_val + isolation_window:
 
+                if ms1_to_ms2_in_cycle_koef != 1:
+                    hill_scans_1 = set(z/ms1_to_ms2_in_cycle_koef for z in hill_scans_1 if z % ms1_to_ms2_in_cycle_koef == 0)
+                    hill_scans_1_list = list(hill_scans_1)
+                    hill_idict_1_tmp = dict()
+                    for z in hill_scans_1:
+                        hill_idict_1_tmp[z] = hill_idict_1[z*ms1_to_ms2_in_cycle_koef]
+                    hill_idict_1 = hill_idict_1_tmp
+                    hill_sqrt_of_i_1 = math.sqrt(sum(v**2 for v in hill_idict_1.values()))
 
                 hill_scans_1_list_first, hill_scans_1_list_last = hill_scans_1_list[0], hill_scans_1_list[-1]
 
@@ -202,7 +213,7 @@ def process_file(args):
 
                             tmp_candidates.append(local_isotopes_dict)
 
-                if len(tmp_candidates):
+                if len(tmp_candidates) >= args['min_ms2_peaks']:
                     outmgf.write('BEGIN IONS\n')
                     outmgf.write('TITLE=%s.%d.%d.%d\n' % (basename_mzml, t_i, t_i, ms1_ch))
                     outmgf.write('RTINSECONDS=%f\n' % (ms1_RT * 60, ))

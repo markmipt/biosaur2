@@ -73,7 +73,7 @@ def cos_correlation(set hill_scans_1, dict hill_idict_1, float hill_sqrt_of_i_1,
     cdef float top
 
     top = 0
-    for i in  hill_scans_1.intersection(hill_scans_2):
+    for i in hill_scans_1.intersection(hill_scans_2):
         top += hill_idict_1.get(i, 0) * hill_idict_2.get(i, 0)
     
     return top / (hill_sqrt_of_i_1 * hill_sqrt_of_i_2)

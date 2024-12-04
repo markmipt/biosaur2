@@ -473,9 +473,12 @@ def process_mzml_dia(args):
     data_for_analyse = []
 
     cnt = 0
+    ms1_scans = 0
 
     for z in mzml.read(input_mzml_path):
-        if z['ms level'] == 2:
+        if z['ms level'] == 1:
+            ms1_scans += 1
+        elif z['ms level'] == 2:
 
             if 'mean inverse reduced ion mobility array' not in z:
                 z['ignore_ion_mobility'] = True
@@ -515,4 +518,4 @@ def process_mzml_dia(args):
     logger.info('Number of MS2 scans: %d', len(data_for_analyse))
     logger.info('Number of skipped MS2 scans: %d', skipped)
 
-    return data_for_analyse
+    return data_for_analyse, ms1_scans, cnt
