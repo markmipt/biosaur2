@@ -7,6 +7,7 @@ from scipy.optimize import curve_fit
 import logging
 logger = logging.getLogger(__name__)
 from .cutils import get_fast_dict, get_and_calc_apex_intensity_and_scan, centroid_pasef_scan
+import ast
 
 class MS1OnlyMzML(mzml.MzML): 
      _default_iter_path = '//spectrum[./*[local-name()="cvParam" and @name="ms level" and @value="1"]]' 
@@ -28,7 +29,54 @@ def calibrate_mass(bwidth, mass_left, mass_right, true_md):
     return mass_shift, mass_sigma, pcov[0][0]
 
 
-def process_hills_extra(hills_dict, RT_dict, faims_val, data_start_id):
+def get_hills_dict_from_hills_features(hills_features, hill_mass_accuracy, paseftol):
+    hills_dict = dict()
+    hills_dict['hills_idx_array_unique'] = hills_features['hill_idx'].values
+    hills_dict['hills_mz_median'] = hills_features['mz'].values
+
+
+    max_mz_value = max(hills_dict['hills_mz_median'])
+    mz_step = hill_mass_accuracy * 1e-6 * max_mz_value
+
+    if np.any(hills_features['im']):
+        hills_dict['hills_im_median'] = hills_features['im'].values
+
+    hills_dict['hills_lengths'] = hills_features['nScans'].values
+    hills_dict['hills_scan_lists'] = hills_features['hills_scan_lists'].apply(ast.literal_eval).values
+    hills_dict['hills_scan_sets'] = [set(slist) for slist in hills_dict['hills_scan_lists']]
+    hills_dict['hills_intensity_array'] = hills_features['hills_intensity_list'].apply(ast.literal_eval).values
+
+    hills_dict['hills_mz_median_fast_dict'] = defaultdict(list)
+    if paseftol > 0:
+        hills_dict['hills_im_median_fast_dict'] = defaultdict(set)
+
+    for idx_1, mz_val in enumerate(hills_features['mz'].values):
+        mz_median_int = int(mz_val / mz_step)
+        tmp_scans_list = hills_dict['hills_scan_lists'][idx_1]
+        tmp_val = (idx_1, tmp_scans_list[0], tmp_scans_list[-1])
+        hills_dict['hills_mz_median_fast_dict'][mz_median_int-1].append(tmp_val)
+        hills_dict['hills_mz_median_fast_dict'][mz_median_int].append(tmp_val)
+        hills_dict['hills_mz_median_fast_dict'][mz_median_int+1].append(tmp_val)
+
+        if paseftol > 0:
+            im_median_int = int(hills_features['im'].values[idx_1] / paseftol)
+            hills_dict['hills_im_median_fast_dict'][im_median_int-1].add(idx_1)
+            hills_dict['hills_im_median_fast_dict'][im_median_int].add(idx_1)
+            hills_dict['hills_im_median_fast_dict'][im_median_int+1].add(idx_1)
+
+    hills_dict['hills_idict'] = [None] * len(hills_dict['hills_idx_array_unique'])
+    hills_dict['hill_sqrt_of_i'] = [None] * len(hills_dict['hills_idx_array_unique'])
+    hills_dict['hills_intensity_apex'] = [None] * len(hills_dict['hills_idx_array_unique'])
+    hills_dict['hills_scan_apex'] = [None] * len(hills_dict['hills_idx_array_unique'])
+
+    hills_dict['rtStart'] = hills_features['rtStart'].values
+    hills_dict['rtEnd'] = hills_features['rtEnd'].values
+    hills_dict['rtApex'] = hills_features['rtApex'].values
+
+    return hills_dict, mz_step
+
+
+def process_hills_extra(hills_dict, RT_dict, faims_val, data_start_id, mz_step, paseftol):
 
     hills_features = []
     for idx_1 in range(len(hills_dict['hills_idx_array_unique'])):
@@ -84,9 +132,15 @@ def calc_peptide_features(hills_dict, peptide_features, negative_mode, faims_val
                 
 
         pep_feature['scanApex'] = hills_dict['hills_scan_apex'][pep_feature['monoisotope idx']]
-        pep_feature['rtApex'] = RT_dict[hills_dict['hills_scan_apex'][pep_feature['monoisotope idx']]+data_start_id]
-        pep_feature['rtStart'] = RT_dict[hills_dict['hills_scan_lists'][pep_feature['monoisotope idx']][0]+data_start_id]
-        pep_feature['rtEnd'] = RT_dict[hills_dict['hills_scan_lists'][pep_feature['monoisotope idx']][-1]+data_start_id]
+        if RT_dict is not False:
+            pep_feature['rtApex'] = RT_dict[hills_dict['hills_scan_apex'][pep_feature['monoisotope idx']]+data_start_id]
+            pep_feature['rtStart'] = RT_dict[hills_dict['hills_scan_lists'][pep_feature['monoisotope idx']][0]+data_start_id]
+            pep_feature['rtEnd'] = RT_dict[hills_dict['hills_scan_lists'][pep_feature['monoisotope idx']][-1]+data_start_id]
+        else:
+            pep_feature['rtApex'] = hills_dict['rtApex'][pep_feature['monoisotope idx']]
+            pep_feature['rtStart'] = hills_dict['rtStart'][pep_feature['monoisotope idx']]
+            pep_feature['rtEnd'] = hills_dict['rtEnd'][pep_feature['monoisotope idx']]
+
         pep_feature['mono_hills_scan_lists'] = hills_dict['hills_scan_lists'][pep_feature['monoisotope idx']]
         pep_feature['mono_hills_intensity_list'] =  hills_dict['hills_intensity_array'][pep_feature['monoisotope idx']]
 
@@ -117,8 +171,8 @@ def write_output(peptide_features, args, write_header=True, hills=False):
             'FAIMS',
             'im',
         ]
-        if args['write_extra_details']:
-            columns_for_output += ['hill_idx', 'hills_scan_lists', 'hills_intensity_list', 'hills_mz_array']
+        # if args['write_extra_details']:
+        columns_for_output += ['hill_idx', 'hills_scan_lists', 'hills_intensity_list', 'hills_mz_array']
     else:
         columns_for_output = [
             'massCalib',
