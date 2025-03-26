@@ -9,6 +9,10 @@ logger = logging.getLogger(__name__)
 from .cutils import get_fast_dict, get_and_calc_apex_intensity_and_scan, centroid_pasef_scan
 import ast
 
+
+
+
+
 class MS1OnlyMzML(mzml.MzML): 
      _default_iter_path = '//spectrum[./*[local-name()="cvParam" and @name="ms level" and @value="1"]]' 
      _use_index = False 
@@ -28,6 +32,21 @@ def calibrate_mass(bwidth, mass_left, mass_right, true_md):
     mass_shift, mass_sigma = popt[1], abs(popt[2])
     return mass_shift, mass_sigma, pcov[0][0]
 
+def masklist(ar1, mask1):
+    return [a for a,b in zip(ar1, mask1) if b]
+
+def filter_hills(hills_dict, ready_set, hill_mass_accuracy, paseftol):
+    idx_to_keep = [hid not in ready_set for hid in hills_dict['hills_idx_array']]
+    hills_dict2 = dict()
+
+    hills_dict2['hills_idx_array'] = masklist(list(hills_dict['hills_idx_array']), idx_to_keep)
+    hills_dict2['orig_idx_array'] = masklist(list(hills_dict['orig_idx_array']), idx_to_keep)
+    hills_dict2['scan_idx_array'] = masklist(list(hills_dict['scan_idx_array']), idx_to_keep)
+    hills_dict2['mzs_array'] = masklist(list(hills_dict['mzs_array']), idx_to_keep)
+    hills_dict2['intensity_array'] = masklist(list(hills_dict['intensity_array']), idx_to_keep)
+    if 'im_array' in hills_dict:
+        hills_dict2['im_array'] = masklist(list(hills_dict['im_array']), idx_to_keep)
+    return hills_dict2
 
 def get_hills_dict_from_hills_features(hills_features, hill_mass_accuracy, paseftol):
     hills_dict = dict()

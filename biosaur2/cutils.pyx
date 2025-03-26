@@ -320,12 +320,12 @@ def get_fast_dict(np.ndarray mz_sorted, float mz_step, list basic_id_sorted):
 @cython.boundscheck(False)
 @cython.wraparound(True)
 def meanfilt(list data, int window_width):
-    cdef np.ndarray cumsum_vec, ma_vec_array
-    cdef list ma_vec
-    cumsum_vec = np.cumsum(data, dtype=float)
-    cumsum_vec[window_width:] = cumsum_vec[window_width:] - cumsum_vec[:-window_width]
-    ma_vec = data[:1] + list(cumsum_vec / window_width) + data[-1:]
-    return ma_vec
+    cdef np.ndarray kern
+    kern=np.ones(2*window_width+1)/(2*window_width+1)
+
+    return np.convolve(data,kern, mode='same')
+
+
 
 
 @cython.cdivision(True)
@@ -439,15 +439,15 @@ def centroid_pasef_scan(dict scandict, float mz_step, float hill_mz_accuracy, fl
 def split_peaks(dict hills_dict, list data_for_analyse_tmp, dict args, dict counter_hills_idx, list sorted_idx_child_process, np.ndarray sorted_idx_array_child_process, int nproc, int checked_id):
 
     cdef float hillValleyFactor, min_val, mult_val
-    cdef int min_length_hill, idx_start, idx_end, cur_new_idx, idx_1, hill_idx, hill_length, c_len, l_idx
-    cdef np.ndarray idx_sort, tmp_scans, tmp_orig_idx, new_index_list
-    cdef list tmp_intensity, smothed_intensity, min_idx_list, recheck_r_r 
+    cdef int min_length_hill, idx_start, idx_end, cur_new_idx, idx_1, hill_idx, hill_length, c_len, l_idx, idx
+    cdef np.ndarray idx_sort, tmp_scans, tmp_orig_idx, new_index_list, smothed_intensity
+    cdef list tmp_intensity, min_idx_list, recheck_r_r 
 
     new_index_list = copy(sorted_idx_array_child_process)
 
     hillValleyFactor = args['hvf']
     min_length_hill = args['minlh']
-    min_length_hill = max(2, min_length_hill)
+    min_length_hill = int(max(2, min_length_hill))
 
     idx_start = 0
     idx_end = 0
@@ -469,7 +469,7 @@ def split_peaks(dict hills_dict, list data_for_analyse_tmp, dict args, dict coun
 
             smothed_intensity = meanfilt(tmp_intensity, 3)
             c_len = hill_length - min_length_hill
-            idx = int(min_length_hill) - 1
+            idx = min_length_hill - 1
             min_idx_list = []
             min_val = 0
             l_idx = 0
@@ -498,8 +498,8 @@ def split_peaks(dict hills_dict, list data_for_analyse_tmp, dict args, dict coun
                                 min_val = mult_val
                 idx += 1
             if len(min_idx_list):
-                for min_idx, end_idx, recheck_idx in zip(min_idx_list, min_idx_list[1:] + [idx_start+hill_length, ], recheck_r_r):
-                    r_r = max(smothed_intensity[recheck_idx+1:end_idx]) / float(smothed_intensity[recheck_idx])
+                for min_idx, end_idx, recheck_idx in zip(min_idx_list, min_idx_list[1:] + [hill_length, ], recheck_r_r):
+                    r_r = max(smothed_intensity[recheck_idx+1:end_idx+1]) / float(smothed_intensity[recheck_idx])
                     if r_r >= hillValleyFactor:
                         new_index_list[idx_start+min_idx:idx_start+hill_length] = cur_new_idx
                         cur_new_idx += 1
@@ -507,6 +507,9 @@ def split_peaks(dict hills_dict, list data_for_analyse_tmp, dict args, dict coun
         idx_start = idx_end
 
     return new_index_list
+
+
+
 
 
 
@@ -617,7 +620,7 @@ def detect_hills(list data_for_analyse_tmp, dict args, float mz_step, float pase
     cdef dict hills_dict, prev_fast_dict, z
     cdef list total_num_hills, total_mass_diff, spec_mean_mass_accuracy, basic_id_sorted, all_idx, all_idx_im, all_prevs
     cdef set banned_prev_idx_set, all_idx_im_set
-    cdef float hill_mass_accuracy, best_intensity, mz_cur, cur_intensity, cur_mass_diff_with_sign, cur_mass_diff, best_mass_diff
+    cdef float hill_mass_accuracy, best_intensity, mz_cur, cur_intensity, cur_mass_diff_with_sign, cur_mass_diff, best_mass_diff, best_mass_diff_with_sign
     cdef int last_idx, prev_idx, spec_idx, len_mz, idx, fm, fi, best_idx_prev, idx_prev
     cdef np.ndarray idx_for_sort, mz_sorted, im_sorted
     cdef bint flag1, flag2, flag3, flag1_im, flag2_im, flag3_im
@@ -709,12 +712,14 @@ def detect_hills(list data_for_analyse_tmp, dict args, float mz_step, float pase
                     cur_mass_diff = abs(cur_mass_diff_with_sign)
                     if cur_mass_diff <= hill_mass_accuracy and cur_intensity >= best_intensity:
                         best_mass_diff = cur_mass_diff
+                        best_mass_diff_with_sign = cur_mass_diff_with_sign
                         best_intensity = cur_intensity
                         best_idx_prev = idx_prev
                         hills_dict['hills_idx_array'][last_idx+1+idx] = hills_dict['hills_idx_array'][prev_idx+1+idx_prev]
                         
                 if best_idx_prev != 0:
                     banned_prev_idx_set.add(best_idx_prev)
+                    total_mass_diff.append(best_mass_diff_with_sign)
 
 
         prev_fast_dict = fast_dict
@@ -723,7 +728,7 @@ def detect_hills(list data_for_analyse_tmp, dict args, float mz_step, float pase
         prev_idx = last_idx
         last_idx = last_idx+len_mz
 
-    return hills_dict
+    return hills_dict, total_mass_diff
 
 
 @cython.cdivision(True)

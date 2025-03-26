@@ -75,6 +75,7 @@ def process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict
 
     logger.info('Number of potential isotope clusters: %d', len(ready))
 
+
     if args['ignore_iso_calib']:
         isotopes_mass_error_map = {}
         for ic in range(1, 10, 1):
@@ -262,6 +263,8 @@ def process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict
 
     utils.write_output(peptide_features, args, write_header)
 
+    return ready_set
+
 def split_peaks_python(qout, hills_dict, data_for_analyse_tmp, args, counter_hills_idx, sorted_idx_child_process, sorted_idx_array_child_process, i, checked_id, win_sys=False):
 
     new_index_list = split_peaks(hills_dict, data_for_analyse_tmp, args, counter_hills_idx, sorted_idx_child_process, sorted_idx_array_child_process, i, checked_id)
@@ -271,12 +274,10 @@ def split_peaks_python(qout, hills_dict, data_for_analyse_tmp, args, counter_hil
         qout.put((i, list(new_index_list)))
         qout.put(None)
 
-def split_peaks_multi(hills_dict, data_for_analyse_tmp, args):
+def split_peaks_multi(hills_dict, data_for_analyse_tmp, hvf, args):
 
-    hillValleyFactor = args['hvf']
+    hillValleyFactor = hvf
     min_length_hill = args['minlh']
-    # min_length_hill = max(2, min_length_hill)
-
 
     hills_dict['orig_idx_array'] = np.array(hills_dict['orig_idx_array'])
     hills_dict['scan_idx_array'] = np.array(hills_dict['scan_idx_array'])
@@ -449,10 +450,39 @@ def process_file(args):
 
             paseftol = args['paseftol']
 
-            hills_dict = detect_hills(data_for_analyse_tmp, args, mz_step, paseftol)
+            if args['use_hill_calib']:
+
+                l_data = len(data_for_analyse_tmp)
+
+                if l_data <= 1000:
+
+                    hills_dict, total_mass_diff = detect_hills(data_for_analyse_tmp, args, mz_step, paseftol)
+
+                else:
+
+                    hills_dict, total_mass_diff = detect_hills(data_for_analyse_tmp[int(l_data/2)-500:int(l_data/2)+500], args, mz_step, paseftol)
+
+                true_md = np.array(total_mass_diff)
+
+                mass_left = -min(true_md)
+                mass_right = max(true_md)
+                mass_shift, mass_sigma, covvalue = utils.calibrate_mass(0.05, mass_left, mass_right, true_md)
+                if abs(mass_shift) >= max(mass_left, mass_right):
+                    mass_shift, mass_sigma, covvalue = utils.calibrate_mass(0.25, mass_left, mass_right, true_md)
+                if np.isinf(covvalue):
+                    mass_shift, mass_sigma, covvalue = utils.calibrate_mass(0.05, mass_left, mass_right, true_md)
+
+                args['htol'] = min(args['htol'], 5 * mass_sigma)
+
+                logger.info('Automatically optimized htol parameter: %.3f ppm', args['htol'])
+
+            hills_dict, total_mass_diff = detect_hills(data_for_analyse_tmp, args, mz_step, paseftol)
+
+
+
             logger.info('Detected number of hills before splitting: %d', len(set(hills_dict['hills_idx_array'])))
 
-            hills_dict = split_peaks_multi(hills_dict, data_for_analyse_tmp, args)
+            hills_dict = split_peaks_multi(hills_dict, data_for_analyse_tmp, args['hvf'], args)
             logger.info('Starting hills processing')
             hills_dict = process_hills(hills_dict, data_for_analyse_tmp, mz_step, paseftol, args)
 
@@ -463,8 +493,7 @@ def process_file(args):
 
 
 
-            process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict, data_start_id, write_header, args)
-
+            ready_set = process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict, data_start_id, write_header, args)
 
             write_header = False
 
@@ -513,7 +542,7 @@ def process_file(args):
             logger.info('Detected number of hills: %d', len(set(hills_dict['hills_idx_array_unique'])))
 
 
-            process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict, data_start_id, write_header, args)
+            ready_set = process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict, data_start_id, write_header, args)
 
 
             write_header = False

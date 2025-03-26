@@ -1,4 +1,5 @@
 from . import utils
+from . import main
 import itertools
 from os import path
 import pandas as pd
@@ -112,6 +113,7 @@ def process_file(args):
 
         hills_dict = detect_hills(data_for_analyse_tmp, args, mz_step, paseftol, dia=True)
 
+        hills_dict = main.split_peaks_multi(hills_dict, data_for_analyse_tmp, args)
 
         mz_step = isolation_window
 

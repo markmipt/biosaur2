@@ -24,6 +24,7 @@ def run():
     parser.add_argument('-htol', help='mass accuracy for hills in ppm', default=8, type=float)
     parser.add_argument('-itol', help='mass accuracy for isotopes in ppm', default=8, type=float)
     parser.add_argument('-ignore_iso_calib', help='Turn off accurate isotope error estimation', action='store_true')
+    parser.add_argument('-use_hill_calib', help='Experimental. Turn on accurate hills error estimation', action='store_true')
     parser.add_argument('-paseftol', help='ion mobility accuracy for hills', default=0.05, type=float)
     parser.add_argument('-nm', help='negative mode. 1-true, 0-false', default=0, type=int)
     parser.add_argument('-o', help='path to output features file', default='')
