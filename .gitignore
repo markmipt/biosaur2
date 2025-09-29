@@ -2,3 +2,5 @@
 **/__pycache__
 build
 .vscode/*
+biosaur2/cutils.c
+biosaur2/cutils.cpython-39-x86_64-linux-gnu.so
