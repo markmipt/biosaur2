@@ -480,6 +480,13 @@ def process_mzml(args):
     data_for_analyse = []
 
     cnt = 0
+    combine_every = args["combine_every"]
+    assert (
+        isinstance(combine_every, int) and combine_every > 0
+    ), "combine_every must be a positive integer"
+    if combine_every > 1:
+        logger.info("Combining every %s MS1 scans.", combine_every)
+    buffer = []  # temporary storage for z's to be merged
 
     for z in MS1OnlyMzML(source=input_mzml_path):
         if z['ms level'] == 1:
@@ -491,21 +498,25 @@ def process_mzml(args):
                 z['ignore_ion_mobility'] = True
                 z['mean inverse reduced ion mobility array'] = np.zeros(len(z['m/z array']))
 
+            # intensity filter
             idx = z['intensity array'] >= min_intensity
             z['intensity array'] = z['intensity array'][idx]
             z['m/z array'] = z['m/z array'][idx]
             z['mean inverse reduced ion mobility array'] = z['mean inverse reduced ion mobility array'][idx]
 
+            # min_mz filter
             idx = z['m/z array'] >= min_mz
             z['m/z array'] = z['m/z array'][idx]
             z['intensity array'] = z['intensity array'][idx]
             z['mean inverse reduced ion mobility array'] = z['mean inverse reduced ion mobility array'][idx]
 
+            # max_mz filter
             idx = z['m/z array'] <= max_mz
             z['m/z array'] = z['m/z array'][idx]
             z['intensity array'] = z['intensity array'][idx]
             z['mean inverse reduced ion mobility array'] = z['mean inverse reduced ion mobility array'][idx]
 
+            # sort by m/z
             idx = np.argsort(z['m/z array'])
             z['m/z array'] = z['m/z array'][idx]
             z['intensity array'] = z['intensity array'][idx]
@@ -513,13 +524,61 @@ def process_mzml(args):
 
             cnt += 1
 
-            # if len(data_for_analyse) > 50:
-            #     break
-
-            if len(z['m/z array']):
-                data_for_analyse.append(z)
+            if combine_every == 1:
+                # just append z directly
+                if len(z['m/z array']):
+                    data_for_analyse.append(z)
+                else:
+                    skipped += 1
             else:
-                skipped += 1
+                # store in buffer and only merge when reaching combine_every
+                buffer.append(z)
+                if len(buffer) == combine_every:
+                    merged = {
+                        "m/z array": np.concatenate([b["m/z array"] for b in buffer]),
+                        "intensity array": np.concatenate(
+                            [b["intensity array"] for b in buffer]
+                        ),
+                        "mean inverse reduced ion mobility array": np.concatenate(
+                            [
+                                b["mean inverse reduced ion mobility array"]
+                                for b in buffer
+                            ]
+                        ),
+                    }
+                    merged.update(
+                        {k: buffer[0][k] for k in buffer[0] if k not in merged}
+                    )
+
+                    if len(merged["m/z array"]):
+                        data_for_analyse.append(merged)
+                        if cnt % 5000 == 0 and logger.level == logging.DEBUG:
+                            logger.debug(
+                                "m/z array start and end for scan %s after merged: %s - %s",
+                                cnt,
+                                merged["m/z array"][0],
+                                merged["m/z array"][-1],
+                            )
+                    else:
+                        skipped += 1
+                    buffer = []
+
+    # handle leftover spectra if not divisible by combine_every
+    if buffer:
+        logger.info("Combining %s leftover MS1 scans..", len(buffer))
+        merged = {
+            "m/z array": np.concatenate([b["m/z array"] for b in buffer]),
+            "intensity array": np.concatenate([b["intensity array"] for b in buffer]),
+            "mean inverse reduced ion mobility array": np.concatenate(
+                [b["mean inverse reduced ion mobility array"] for b in buffer]
+            ),
+        }
+        merged.update({k: buffer[0][k] for k in buffer[0] if k not in merged})
+
+        if len(merged["m/z array"]):
+            data_for_analyse.append(merged)
+        else:
+            skipped += 1
 
 
     logger.info('Number of MS1 scans: %d', len(data_for_analyse))
