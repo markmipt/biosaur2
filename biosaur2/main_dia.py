@@ -111,9 +111,9 @@ def process_file(args):
         paseftol = args['paseftol']
         diadynrange = args['diadynrange']
 
-        hills_dict = detect_hills(data_for_analyse_tmp, args, mz_step, paseftol, dia=True)
+        hills_dict, total_mass_diff = detect_hills(data_for_analyse_tmp, args, mz_step, paseftol, dia=True)
 
-        hills_dict = main.split_peaks_multi(hills_dict, data_for_analyse_tmp, args)
+        hills_dict = main.split_peaks_multi(hills_dict, data_for_analyse_tmp, args['hvf'], args)
 
         mz_step = isolation_window
 

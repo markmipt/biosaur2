@@ -36,6 +36,16 @@ def process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict
 
     n_procs = args['nprocs']
 
+    md_correction = args['md_correction']
+    if md_correction == 'Orbi':
+        md_correction_int = 1
+    elif md_correction == 'Tof':
+        md_correction_int = 2
+    elif md_correction == 'Icr':
+        md_correction_int = 3
+    else:
+        logger.WARNING('md_correction parameter MUST BE Orbi,Tof or ICR. Using Orbi now')
+        md_correction_int = 1
 
     if n_procs == 1:
         qout = []
@@ -45,7 +55,7 @@ def process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict
         sorted_idx_full = [idx_1 for (idx_1, hill_idx_1), hill_mz_1 in sorted(list(zip(list(enumerate(hills_dict['hills_idx_array_unique'])), hills_dict['hills_mz_median'])), key=lambda x: x[-1])]
         sorted_idx_child_process = sorted_idx_full
 
-        qout = get_initial_isotopes_python(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, ivf, list(sorted_idx_child_process), qout, win_sys=True)
+        qout = get_initial_isotopes_python(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, ivf, list(sorted_idx_child_process), qout, win_sys=True, md_correction_int=md_correction_int)
 
         ready.extend(qout)
 
@@ -62,7 +72,7 @@ def process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict
 
             p = Process(
                 target=get_initial_isotopes_python,
-                args=(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, ivf, list(sorted_idx_child_process), qout))
+                args=(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, ivf, list(sorted_idx_child_process), qout, False, md_correction_int))
             p.start()
             procs.append(p)
 
@@ -383,9 +393,9 @@ def split_peaks_multi(hills_dict, data_for_analyse_tmp, hvf, args):
 
     return hills_dict
 
-def get_initial_isotopes_python(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, ivf, sorted_idx_child_process, qout, win_sys=False):
+def get_initial_isotopes_python(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, ivf, sorted_idx_child_process, qout, win_sys=False, md_correction_int=1):
 
-    ready_local = get_initial_isotopes(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, ivf, sorted_idx_child_process)
+    ready_local = get_initial_isotopes(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, ivf, sorted_idx_child_process, md_correction_int)
     if win_sys:
         return ready_local
     else:
@@ -395,6 +405,17 @@ def get_initial_isotopes_python(hills_dict, isotopes_mass_accuracy, isotopes_lis
 def process_file(args):
 
     input_file_path = args['file']
+
+    md_correction = args['md_correction']
+    if md_correction == 'Orbi':
+        md_correction_int = 1
+    elif md_correction == 'Tof':
+        md_correction_int = 2
+    elif md_correction == 'Icr':
+        md_correction_int = 3
+    else:
+        logger.WARNING('md_correction parameter MUST BE Orbi,Tof or ICR. Using Orbi now')
+        md_correction_int = 1
 
     if input_file_path.lower().endswith('.mzml'):
 
@@ -456,11 +477,20 @@ def process_file(args):
 
                 if l_data <= 1000:
 
-                    hills_dict, total_mass_diff = detect_hills(data_for_analyse_tmp, args, mz_step, paseftol)
-
+                    hills_dict, total_mass_diff = detect_hills(data_for_analyse_tmp, args, mz_step, paseftol, md_correction_int=md_correction_int)
                 else:
 
-                    hills_dict, total_mass_diff = detect_hills(data_for_analyse_tmp[int(l_data/2)-500:int(l_data/2)+500], args, mz_step, paseftol)
+                    hills_dict, total_mass_diff = detect_hills(data_for_analyse_tmp[int(l_data/2)-500:int(l_data/2)+500], args, mz_step, paseftol, md_correction_int=md_correction_int)
+
+                total_mass_diff = np.array(total_mass_diff)
+                counter_hills_idx = Counter(hills_dict['hills_idx_array'])
+                min_length_hill = args['minlh']
+
+
+                tmp_hill_length = np.array([counter_hills_idx[hill_idx] for hill_idx in hills_dict['hills_idx_array']])
+                idx_minl = tmp_hill_length >= min_length_hill
+                total_mass_diff = total_mass_diff[idx_minl]
+
 
                 true_md = np.array(total_mass_diff)
 
@@ -472,11 +502,12 @@ def process_file(args):
                 if np.isinf(covvalue):
                     mass_shift, mass_sigma, covvalue = utils.calibrate_mass(0.05, mass_left, mass_right, true_md)
 
-                args['htol'] = min(args['htol'], 5 * mass_sigma)
+                print(mass_shift, mass_sigma)
+                args['htol'] = min(args['htol'], 3 * mass_sigma)
 
                 logger.info('Automatically optimized htol parameter: %.3f ppm', args['htol'])
 
-            hills_dict, total_mass_diff = detect_hills(data_for_analyse_tmp, args, mz_step, paseftol)
+            hills_dict, total_mass_diff = detect_hills(data_for_analyse_tmp, args, mz_step, paseftol, md_correction_int=md_correction_int)
 
 
 

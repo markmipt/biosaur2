@@ -1,4 +1,4 @@
-from . import main, main_dia
+from . import main, main_dia, main_dia2
 import argparse
 from copy import deepcopy
 import logging
@@ -37,6 +37,7 @@ def run():
     parser.add_argument('-cmax', help='max charge', default=6, type=int)
     parser.add_argument('-nprocs', help='number of processes', default=4, type=int)
     parser.add_argument('-dia',  help='create mgf file for DIA MS/MS. Experimental', action='store_true')
+    parser.add_argument('-dia2',  help='create mgf file for DIA MS/MS with no look at MS1 spectra. Experimental', action='store_true')
     parser.add_argument('-diahtol', help='mass accuracy for DIA hills in ppm', default=25, type=float)
     parser.add_argument('-diaminlh', help='minimum length for dia hill', default=1, type=int)
     parser.add_argument('-diadynrange', help='diadynrange', default=1000, type=int)
@@ -47,6 +48,8 @@ def run():
     parser.add_argument('-profile', help='profile processing. Experimental', action='store_true')
     parser.add_argument('-write_hills', help='write tsv file with detected hills', action='store_true')
     parser.add_argument('-write_extra_details', help='write extra details for features', action='store_true')
+    parser.add_argument('-md_correction', help='EXPERIMENTAL. Can be Orbi, Icr or Tof. Sqrt, Linear or Uniform mass error normalization, respectively.', default='Orbi')
+
     args = vars(parser.parse_args())
     logging.basicConfig(format='%(levelname)9s: %(asctime)s %(message)s',
             datefmt='[%H:%M:%S]', level=[logging.INFO, logging.DEBUG][args['debug']])
@@ -62,10 +65,15 @@ def run():
         logger.info('Starting file: %s', filename)
         if 1:
             args['file'] = filename
-            main.process_file(deepcopy(args))
-            logger.info('Feature detection is finished for file: %s', filename)
-            if args['dia']:
-                main_dia.process_file(deepcopy(args))
+
+            if args['dia2']:
+                main_dia2.process_file(deepcopy(args))
+            else:
+
+                main.process_file(deepcopy(args))
+                logger.info('Feature detection is finished for file: %s', filename)
+                if args['dia']:
+                    main_dia.process_file(deepcopy(args))
         
         # except Exception as e:
         #     logger.error(e)

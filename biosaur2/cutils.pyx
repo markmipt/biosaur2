@@ -81,7 +81,7 @@ def cos_correlation(set hill_scans_1, dict hill_idict_1, float hill_sqrt_of_i_1,
 @cython.cdivision(True)
 @cython.boundscheck(False)
 @cython.wraparound(True)
-def get_initial_isotopes(dict hills_dict, float isotopes_mass_accuracy, list isotopes_list, dict a, int min_charge, int max_charge, float mz_step, float paseftol, float faims_val, float ivf, list sorted_idx_child_process):
+def get_initial_isotopes(dict hills_dict, float isotopes_mass_accuracy, list isotopes_list, dict a, int min_charge, int max_charge, float mz_step, float paseftol, float faims_val, float ivf, list sorted_idx_child_process, int md_correction_int):
 
     cdef list ready, charges, hill_scans_1_list, hill_scans_2_list, candidates, tmp_candidates
     cdef int idx_1, hill_idx_1, idx_2, hill_idx_2, im_to_check_fast, hill_scans_1_list_first, hill_scans_1_list_last
@@ -151,7 +151,14 @@ def get_initial_isotopes(dict hills_dict, float isotopes_mass_accuracy, list iso
                                         hills_dict, _, _ = get_and_calc_apex_intensity_and_scan(hills_dict, idx_1)
                                         hills_dict, _, _ = get_and_calc_apex_intensity_and_scan(hills_dict, idx_2)
 
-                                        mass_diff_ppm = mass_diff_abs*1e6/m_to_check
+                                        if md_correction_int == 1:
+                                            mass_diff_error_koeff = math.sqrt(600 / m_to_check)
+                                        elif md_correction_int == 2:
+                                            mass_diff_error_koeff = 1
+                                        elif md_correction_int == 3:
+                                            mass_diff_error_koeff = 600 / m_to_check
+
+                                        mass_diff_ppm = mass_diff_abs*1e6/m_to_check * mass_diff_error_koeff
 
                                         local_isotopes_dict = {
                                             'isotope_number': isotope_number,
@@ -323,7 +330,7 @@ def meanfilt(list data, int window_width):
     cdef np.ndarray kern
     kern=np.ones(2*window_width+1)/(2*window_width+1)
 
-    return np.convolve(data,kern, mode='same')
+    return np.clip(np.convolve(data,kern, mode='same'), a_min=0, a_max=None)
 
 
 
@@ -615,7 +622,7 @@ def split_peaks_old(dict hills_dict, list data_for_analyse_tmp, dict args):
 @cython.cdivision(True)
 @cython.boundscheck(False)
 @cython.wraparound(True)
-def detect_hills(list data_for_analyse_tmp, dict args, float mz_step, float paseftol, bint dia=False):
+def detect_hills(list data_for_analyse_tmp, dict args, float mz_step, float paseftol, bint dia=False, int md_correction_int=1):
 
     cdef dict hills_dict, prev_fast_dict, z
     cdef list total_num_hills, total_mass_diff, spec_mean_mass_accuracy, basic_id_sorted, all_idx, all_idx_im, all_prevs
@@ -709,6 +716,19 @@ def detect_hills(list data_for_analyse_tmp, dict args, float mz_step, float pase
                 all_prevs = [[idx_prev, data_for_analyse_tmp[spec_idx-1]['intensity array'][idx_prev]] for idx_prev in all_idx if (idx_prev not in banned_prev_idx_set and (paseftol == 0 or (flag2_im and idx_prev in prev_fast_dict_im[fi-1]) or (flag1_im and idx_prev in prev_fast_dict_im[fi]) or (flag3_im and idx_prev in prev_fast_dict_im[fi+1])))]
                 for idx_prev, cur_intensity in all_prevs:
                     cur_mass_diff_with_sign = (mz_cur - data_for_analyse_tmp[spec_idx-1]['m/z array'][idx_prev]) / mz_cur * 1e6
+
+
+                    if md_correction_int == 1:
+                        mass_diff_error_koeff = math.sqrt(600 / mz_cur)
+                    elif md_correction_int == 2:
+                        mass_diff_error_koeff = 1
+                    elif md_correction_int == 3:
+                        mass_diff_error_koeff = 600 / mz_cur
+
+                    cur_mass_diff_with_sign = cur_mass_diff_with_sign * mass_diff_error_koeff
+
+
+
                     cur_mass_diff = abs(cur_mass_diff_with_sign)
                     if cur_mass_diff <= hill_mass_accuracy and cur_intensity >= best_intensity:
                         best_mass_diff = cur_mass_diff
