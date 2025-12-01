@@ -49,7 +49,12 @@ def run():
     parser.add_argument('-write_hills', help='write tsv file with detected hills', action='store_true')
     parser.add_argument('-write_extra_details', help='write extra details for features', action='store_true')
     parser.add_argument('-md_correction', help='EXPERIMENTAL. Can be Orbi, Icr or Tof. Sqrt, Linear or Uniform mass error normalization, respectively.', default='Orbi')
-
+    parser.add_argument(
+        "-combine_every",
+        help="combine every n ms1 scans, useful for e.g. gas phase fractionation data",
+        default=1,
+        type=int,
+    )
     args = vars(parser.parse_args())
     logging.basicConfig(format='%(levelname)9s: %(asctime)s %(message)s',
             datefmt='[%H:%M:%S]', level=[logging.INFO, logging.DEBUG][args['debug']])
