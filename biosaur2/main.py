@@ -14,13 +14,16 @@ import os
 def process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict, data_start_id, write_header, args):
     isotopes_mass_accuracy = args['itol']
 
+    min_charge = args['cmin']
+    max_charge = args['cmax']
+    ivf = args['ivf']
 
     isotopes_list = list(range(10))
     averagine_mass = 111.1254
     averagine_C = 4.9384
     a = dict()
 
-    for i in range(0, 20000, 100):
+    for i in range(0, 20000 * max_charge, 100):
         int_arr = binom.pmf(
             isotopes_list,
             round(float(i) / averagine_mass * averagine_C),
@@ -29,10 +32,6 @@ def process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict
         max_pos = np.argmax(int_arr)
         int_arr_norm = int_arr / int_arr.sum()
         a[i] = (int_arr_norm, max_pos)
-
-    min_charge = args['cmin']
-    max_charge = args['cmax']
-    ivf = args['ivf']
 
     n_procs = args['nprocs']
 

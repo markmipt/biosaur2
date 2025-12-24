@@ -8,19 +8,6 @@ from copy import copy
 
 np.import_array()
 
-cdef dict charge_ban_map
-
-charge_ban_map = {
-    8: (1, 2, 4, ),
-    7: (1, ),
-    6: (1, 2, 3, ),
-    5: (1, ),
-    4: (1, 2, ),
-    3: (1, ),
-    2: (1, ),
-    1: (1, ),
-}
-
 
 @cython.cdivision(True)
 @cython.boundscheck(False)
@@ -84,13 +71,19 @@ def cos_correlation(set hill_scans_1, dict hill_idict_1, float hill_sqrt_of_i_1,
 def get_initial_isotopes(dict hills_dict, float isotopes_mass_accuracy, list isotopes_list, dict a, int min_charge, int max_charge, float mz_step, float paseftol, float faims_val, float ivf, list sorted_idx_child_process, int md_correction_int):
 
     cdef list ready, charges, hill_scans_1_list, hill_scans_2_list, candidates, tmp_candidates
-    cdef int idx_1, hill_idx_1, idx_2, hill_idx_2, im_to_check_fast, hill_scans_1_list_first, hill_scans_1_list_last
+    cdef int idx_1, hill_idx_1, idx_2, hill_idx_2, im_to_check_fast, hill_scans_1_list_first, hill_scans_1_list_last, ch_cur, ch_iter
     cdef int hill_scans_2_list_first, hill_scans_2_list_last, charge, isotope_number, m_to_check_fast, max_pos, i_local_isotope
     cdef float im_mz_1, hill_mz_1, im_mz_2, hill_mz_2, m_to_check, mass_diff_abs, cos_cor_RT
     cdef float hill_sqrt_of_i_1, hill_sqrt_of_i_2, local_minimum, hill_intensity_apex_1, hill_intensity_apex_2
     cdef double mass_diff_ppm
     cdef dict banned_charges, hill_idict_1, hill_idict_2, local_isotopes_dict
     cdef set hill_scans_1, hill_scans_2
+    cdef dict charge_ban_map
+
+    charge_ban_map = {1: [1, ]}
+    for ch_cur in range(2, max_charge + 1):
+        charge_ban_map[ch_cur] = [ch_iter for ch_iter in charge_ban_map.keys() if (ch_cur % ch_iter) == 0]
+
 
     ready = []
 
