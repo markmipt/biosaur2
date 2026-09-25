@@ -450,6 +450,11 @@ def process_mzml(args):
     min_intensity = args['mini']
     min_mz = args['minmz']
     max_mz = args['maxmz']
+    min_rt = args['rtmin']
+    max_rt = args['rtmax']
+
+    logger.info(f'Processing mzML file: {input_mzml_path}')
+    logger.debug(f'min_intensity={min_intensity}, min_mz={min_mz}, max_mz={max_mz}, min_rt={min_rt}, max_rt={max_rt}')
 
     skipped = 0
     data_for_analyse = []
@@ -464,6 +469,14 @@ def process_mzml(args):
     buffer = []  # temporary storage for z's to be merged
 
     for z in MS1OnlyMzML(source=input_mzml_path):
+        rt = z['scanList']['scan'][0]['scan start time']
+        #apply RT filtering
+        if rt < min_rt:
+            continue
+
+        if max_rt > 0 and rt > max_rt:
+            break
+
         if z['ms level'] == 1:
 
             if 'raw ion mobility array' in z:

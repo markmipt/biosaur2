@@ -17,6 +17,8 @@ def run():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser.add_argument('files', help='input mzML or hills (Experimental) files', nargs='+')
+    parser.add_argument('-rtmin', help='Lowest RT to slice', default=0, type=float)
+    parser.add_argument('-rtmax', help='Highest RT to slice', default=-1, type=float)
     parser.add_argument('-mini', help='min intensity', default=1, type=float)
     parser.add_argument('-minmz', help='min mz', default=350, type=float)
     parser.add_argument('-maxmz', help='max mz', default=1500, type=float)
