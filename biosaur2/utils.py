@@ -9,10 +9,6 @@ logger = logging.getLogger(__name__)
 from .cutils import get_fast_dict, get_and_calc_apex_intensity_and_scan, centroid_pasef_scan
 import ast
 
-
-
-
-
 class MS1OnlyMzML(mzml.MzML): 
      _default_iter_path = '//spectrum[./*[local-name()="cvParam" and @name="ms level" and @value="1"]]' 
      _use_index = False 
@@ -386,85 +382,64 @@ def process_profile(data_for_analyse_tmp):
 
 
 
-def process_tof(data_for_analyse_tmp):
+def process_tof(data_for_analyse_tmp, noise_factor):
 
-            # print(len(z['m/z array']))
     universal_dict = {}
-    cnt = 0
-
-
+    
+    logger.debug('Determining intensity thresholds for TOF data...')
     temp_i = defaultdict(list)
-    for z in data_for_analyse_tmp:
-        cnt += 1
+    for z in data_for_analyse_tmp[:25]:
         fast_set = z['m/z array'] // 50
 
-        if cnt <= 25:
+        for l in set(fast_set):
+            idxt = fast_set == l
+            true_i = np.log10(z['intensity array'])[idxt]
+            temp_i[l].extend(true_i)
 
+    for l, temp_bin in temp_i.items():
+        logger.debug('Processing bin %d with %d intensity values for TOF threshold determination', l * 50, len(temp_bin))
+        if len(temp_bin) > 150:
+            temp_bin = np.array(temp_bin)
+            i_left = temp_bin.min()
+            i_right = temp_bin.max()
 
+            i_shift, i_sigma, covvalue = calibrate_mass(0.05, i_left, i_right, temp_bin)
+            if np.isfinite(covvalue):
+                universal_dict[l] = 10**(i_shift + noise_factor * i_sigma) #10**(np.median(true_i[idxt]) * 2)
+                logger.debug(f'Noise threshold for bin {l * 50}: {i_shift}, {i_sigma}, {covvalue} -> {universal_dict[l]}')
 
-            for l in set(fast_set):
+    thresholds_debug = '\n'.join([f'{l * 50}: {universal_dict[l]}' for l in sorted(universal_dict.keys())])
+    logger.debug(f'Determined intensity thresholds for TOF data:\n{thresholds_debug}')
 
-                if l not in universal_dict:
+    #for the missing bins, we will use the avergae threshold of the two closest bins
+    bins = sorted(universal_dict.keys())
+    n = bins[1]
+    while n < bins[-1]:
+        if n not in universal_dict:
+            #previous should always exist, but next might not exist, so we will use the closest bin to the right
+            next_bin = [b for b in bins if b > n][0]
+            universal_dict[n] = universal_dict[n-1] + (universal_dict[next_bin] - universal_dict[n-1]) / (next_bin - n + 1)
+            logger.debug(f'Interpolated noise threshold for missing bin {n * 50}: {universal_dict[n]}')
+        n += 1
 
-                    idxt = fast_set == l
-                    true_i = np.log10(z['intensity array'])[idxt]
-                    temp_i[l].extend(true_i)
+    thresholds_debug = '\n'.join([f'{l * 50}: {universal_dict[l]}' for l in sorted(universal_dict.keys())])
+    logger.debug(f'Final determined intensity thresholds for TOF data:\n{thresholds_debug}')
 
-                    if len(temp_i[l]) > 150:
-
-                        temp_i[l] = np.array(temp_i[l])
-                        i_left = temp_i[l].min()
-                        i_right = temp_i[l].max()
-
-                        i_shift, i_sigma, covvalue = calibrate_mass(0.05, i_left, i_right, temp_i[l])
-                        # median_val = 
-                        print(i_shift, i_sigma, covvalue)
-                        universal_dict[l] = 10**(i_shift + 2 * i_sigma)#10**(np.median(true_i[idxt]) * 2)
-            
-
-    cnt = 0
-
+    logger.debug('Filtering TOF data using determined intensity thresholds...')
     for z in data_for_analyse_tmp:
-
         fast_set = z['m/z array'] // 50
-        while cnt <= 50:
-
-            cnt += 1
-
-            temp_i = []
-
-            for l in set(fast_set):
-                idxt = fast_set == l
-                true_i = np.log10(z['intensity array'])[idxt]
-                temp_i.extend(true_i)
-
-                if len(true_i) > 150:
-
-                    i_left = true_i.min()
-                    i_right = true_i.max()
-
-                    i_shift, i_sigma, covvalue = calibrate_mass(0.05, i_left, i_right, true_i)
-                    # median_val = 
-                    print(i_shift, i_sigma, covvalue)
-                    universal_dict[l] = 10**(i_shift + 3 * i_sigma)#10**(np.median(true_i[idxt]) * 2)
-            
-
-            
         thresholds = [universal_dict.get(zz, 150) for zz in list(fast_set)]
         idxt2 = z['intensity array'] <= thresholds
         z['intensity array'][idxt2] = -1
-
 
         idx = z['intensity array'] > 0
         z['intensity array'] = z['intensity array'][idx]
         z['m/z array'] = z['m/z array'][idx]
         z['mean inverse reduced ion mobility array'] = z['mean inverse reduced ion mobility array'][idx]
 
-
-
-        cnt += 1
-
-        data_for_analyse_tmp = [z for z in data_for_analyse_tmp if len(z['m/z array'])]
+    logger.debug('Filtering complete. Removing scans with no remaining peaks...')
+    data_for_analyse_tmp = [z for z in data_for_analyse_tmp if len(z['m/z array'])]
+    logger.info(f'Number of MS1 scans after TOF filtering: {len(data_for_analyse_tmp)}')
 
     return data_for_analyse_tmp
 

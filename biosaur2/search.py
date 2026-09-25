@@ -45,6 +45,7 @@ def run():
     parser.add_argument('-mgf', help='path to output mgf file', default='')
     parser.add_argument('-debug', help='log debugging information', action='store_true')
     parser.add_argument('-tof', help='smart tof processing. Experimental', action='store_true')
+    parser.add_argument('-tof_noise_factor', help='noise factor for smart tof processing. Experimental', default=3.0, type=float)
     parser.add_argument('-profile', help='profile processing. Experimental', action='store_true')
     parser.add_argument('-write_hills', help='write tsv file with detected hills', action='store_true')
     parser.add_argument('-write_extra_details', help='write extra details for features', action='store_true')
@@ -63,7 +64,7 @@ def run():
     logger.debug('Starting with args: %s', args)
 
     if os.name == 'nt':
-        # logger.info('Turning off multiprocessing for Windows system')
+        logger.debug('Turning off multiprocessing for Windows system')
         args['nprocs'] = 1
 
     for filename in args['files']:
