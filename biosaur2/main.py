@@ -43,10 +43,11 @@ def process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict
     elif md_correction == 'Icr':
         md_correction_int = 3
     else:
-        logger.WARNING('md_correction parameter MUST BE Orbi,Tof or ICR. Using Orbi now')
+        logger.warning('md_correction parameter MUST BE Orbi,Tof or ICR. Using Orbi now')
         md_correction_int = 1
 
     if n_procs == 1:
+        logger.debug('Running get_initial_isotopes in single process mode')
         qout = []
         ready = []
         procs = []
@@ -59,6 +60,7 @@ def process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict
         ready.extend(qout)
 
     else:
+        logger.debug('Running get_initial_isotopes in multi-process mode with %d processes', n_procs)
         qout = Queue()
         ready = []
         procs = []
@@ -66,6 +68,7 @@ def process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict
         sorted_idx_full = [idx_1 for (idx_1, hill_idx_1), hill_mz_1 in sorted(list(zip(list(enumerate(hills_dict['hills_idx_array_unique'])), hills_dict['hills_mz_median'])), key=lambda x: x[-1])]
         len_full = len(sorted_idx_full)
         step = int(len_full / n_procs)
+        logger.debug('Total hills to process: %d, step size per process: %d', len_full, step)
         for i in range(n_procs):
             sorted_idx_child_process = sorted_idx_full[i*step:i*step+step]
 
@@ -81,9 +84,7 @@ def process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict
         for p in procs:
             p.join()
 
-
     logger.info('Number of potential isotope clusters: %d', len(ready))
-
 
     if args['ignore_iso_calib']:
         isotopes_mass_error_map = {}
@@ -177,12 +178,10 @@ def process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict
                 ready[cur_l]['nIsotopes'] = tmp_n_isotopes + 1
                 ready[cur_l]['intensity_array_for_cos_corr'] = [all_theoretical_int, all_exp_intensity]
 
-
             else:
                 del ready[cur_l]
                 max_l -= 1
                 cur_l -= 1
-
 
         else:
             del ready[cur_l]
@@ -202,7 +201,6 @@ def process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict
     ready_set = set()
     ready = sorted(ready, key=func_for_sort)
     cur_isotopes = ready[0]['nIsotopes']
-
 
     while cur_l < max_l:
         pep_feature = ready[cur_l]
@@ -269,7 +267,7 @@ def process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict
     negative_mode = args['nm']
     isotopes_for_intensity = args['iuse']
     peptide_features = utils.calc_peptide_features(hills_dict, ready_final, negative_mode, faims_val, RT_dict, data_start_id, isotopes_for_intensity)
-
+    
     utils.write_output(peptide_features, args, write_header)
 
     return ready_set
@@ -413,7 +411,7 @@ def process_file(args):
     elif md_correction == 'Icr':
         md_correction_int = 3
     else:
-        logger.WARNING('md_correction parameter MUST BE Orbi,Tof or ICR. Using Orbi now')
+        logger.warning('md_correction parameter MUST BE Orbi,Tof or ICR. Using Orbi now')
         md_correction_int = 1
 
     if input_file_path.lower().endswith('.mzml'):
@@ -443,8 +441,6 @@ def process_file(args):
                     data_for_analyse_tmp.append(z)
                     RT_dict[data_cur_id] = float(z['scanList']['scan'][0]['scan start time'])
                     data_cur_id += 1
-                    
-
 
             hill_mass_accuracy = args['htol']
             max_mz_value = 0
@@ -455,7 +451,7 @@ def process_file(args):
 
             #Process TOF
             if args['tof']:
-                data_for_analyse_tmp = utils.process_tof(data_for_analyse_tmp)
+                data_for_analyse_tmp = utils.process_tof(data_for_analyse_tmp, args['tof_noise_factor'])
 
             #Process profile
             if args['profile']:
@@ -506,13 +502,14 @@ def process_file(args):
 
                 logger.info('Automatically optimized htol parameter: %.3f ppm', args['htol'])
 
+            logger.info('Starting hills detection')
             hills_dict, total_mass_diff = detect_hills(data_for_analyse_tmp, args, mz_step, paseftol, md_correction_int=md_correction_int)
-
-
 
             logger.info('Detected number of hills before splitting: %d', len(set(hills_dict['hills_idx_array'])))
 
             hills_dict = split_peaks_multi(hills_dict, data_for_analyse_tmp, args['hvf'], args)
+            logger.info('Detected number of hills after splitting: %d', len(set(hills_dict['hills_idx_array'])))
+
             logger.info('Starting hills processing')
             hills_dict = process_hills(hills_dict, data_for_analyse_tmp, mz_step, paseftol, args)
 
@@ -521,15 +518,12 @@ def process_file(args):
                 hills_dict, hills_features = utils.process_hills_extra(hills_dict, RT_dict, faims_val, data_start_id, mz_step, paseftol)
                 utils.write_output(hills_features, args, write_header, hills=True)
 
-
-
+            logger.info('Starting features detection')
             ready_set = process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict, data_start_id, write_header, args)
 
             write_header = False
 
             data_start_id += len(data_for_analyse_tmp)
-
-
 
     elif input_file_path.lower().endswith('.hills.tsv'):
         hills_features = pd.read_table(input_file_path)
