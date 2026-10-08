@@ -334,6 +334,17 @@ def process_profile(data_for_analyse_tmp):
 
     data_for_analyse_tmp_out = []
 
+    all_thresholds = []
+    all_intensities = []
+    for z in data_for_analyse_tmp:
+        if len(z['m/z array']) >= 10:
+            all_thresholds.append(np.min(np.diff(z['m/z array'])/z['m/z array'][:-1]) * 2)
+            # all_intensities.append(np.median((z['intensity array'])))
+    threshold_ppm = np.median(all_thresholds)
+    # threshold_ppm = np.average(all_thresholds, weights=all_intensities)
+    # print('threshold_ppm', threshold_ppm)
+
+
     for z in data_for_analyse_tmp:
 
         best_mz = 0
@@ -342,7 +353,10 @@ def process_profile(data_for_analyse_tmp):
         prev_mz = False
         prev_int = False
 
-        threshold = 0.05
+        # if len(z['m/z array']) >= 10:
+            # threshold = 0.05
+            # threshold = np.median(np.diff(z['m/z array'])) * 2
+            # threshold_ppm = np.median(np.diff(z['m/z array'])/z['m/z array'][:-1]) * 2
 
         ar1 = []
         ar2 = []
@@ -352,14 +366,8 @@ def process_profile(data_for_analyse_tmp):
                 best_mz = mzv
                 best_int = intv
                 best_im = imv
-            elif mzv - prev_mz > threshold:
-                ar1.append(best_mz)
-                ar2.append(best_int)
-                ar3.append(best_im)
-                best_mz = mzv
-                best_int = intv
-                best_im = imv
-            elif best_int > prev_int and intv > prev_int:
+            # elif mzv - prev_mz > threshold:
+            elif mzv - prev_mz > threshold_ppm * mzv:
                 ar1.append(best_mz)
                 ar2.append(best_int)
                 ar3.append(best_im)
@@ -370,6 +378,13 @@ def process_profile(data_for_analyse_tmp):
                 best_mz = mzv
                 best_int = intv
                 best_im = imv
+            # elif best_int > prev_int and intv > prev_int:
+            #     ar1.append(best_mz)
+            #     ar2.append(best_int)
+            #     ar3.append(best_im)
+            #     best_mz = mzv
+            #     best_int = intv
+            #     best_im = imv
             prev_mz = mzv
             prev_int = intv
 
@@ -488,7 +503,7 @@ def process_mzml(args):
         logger.info("Combining every %s MS1 scans.", combine_every)
     buffer = []  # temporary storage for z's to be merged
 
-    for z in MS1OnlyMzML(source=input_mzml_path):
+    for z in MS1OnlyMzML(source=input_mzml_path, cv=None):
         if z['ms level'] == 1:
 
             if 'raw ion mobility array' in z:
