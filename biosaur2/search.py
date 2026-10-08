@@ -17,6 +17,8 @@ def run():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser.add_argument('files', help='input mzML or hills (Experimental) files', nargs='+')
+    parser.add_argument('-rtmin', help='Lowest RT to slice', default=0, type=float)
+    parser.add_argument('-rtmax', help='Highest RT to slice', default=-1, type=float)
     parser.add_argument('-mini', help='min intensity', default=1, type=float)
     parser.add_argument('-minmz', help='min mz', default=350, type=float)
     parser.add_argument('-maxmz', help='max mz', default=1500, type=float)
@@ -45,6 +47,7 @@ def run():
     parser.add_argument('-mgf', help='path to output mgf file', default='')
     parser.add_argument('-debug', help='log debugging information', action='store_true')
     parser.add_argument('-tof', help='smart tof processing. Experimental', action='store_true')
+    parser.add_argument('-tof_noise_factor', help='noise factor for smart tof processing. Experimental', default=3.0, type=float)
     parser.add_argument('-profile', help='profile processing. Experimental', action='store_true')
     parser.add_argument('-write_hills', help='write tsv file with detected hills', action='store_true')
     parser.add_argument('-write_extra_details', help='write extra details for features', action='store_true')
@@ -63,7 +66,7 @@ def run():
     logger.debug('Starting with args: %s', args)
 
     if os.name == 'nt':
-        # logger.info('Turning off multiprocessing for Windows system')
+        logger.debug('Turning off multiprocessing for Windows system')
         args['nprocs'] = 1
 
     for filename in args['files']:
