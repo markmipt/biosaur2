@@ -37,7 +37,7 @@ def run():
     parser.add_argument('-pasefminlh', help='minimum length for pasef hill', default=1, type=int)
     parser.add_argument('-cmin', help='min charge', default=1, type=int)
     parser.add_argument('-cmax', help='max charge', default=6, type=int)
-    parser.add_argument('-nprocs', help='number of processes', default=4, type=int)
+    parser.add_argument('-nprocs', help='number of processes', default=1, type=int)
     parser.add_argument('-dia',  help='create mgf file for DIA MS/MS. Experimental', action='store_true')
     parser.add_argument('-dia2',  help='create mgf file for DIA MS/MS with no look at MS1 spectra. Experimental', action='store_true')
     parser.add_argument('-diahtol', help='mass accuracy for DIA hills in ppm', default=25, type=float)
