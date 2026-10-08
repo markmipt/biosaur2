@@ -1,7 +1,7 @@
-pyteomics
-scipy
-numpy>=1.17,<2
-pandas
-lxml
+pyteomics==4.7.5
+scipy==1.17.1
+numpy==2.5.3
+pandas==2.3.3
+lxml==6.1.3
 cython
 setuptools
