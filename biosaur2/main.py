@@ -316,7 +316,9 @@ def split_peaks_multi(hills_dict, data_for_analyse_tmp, hvf, args):
 
         data_for_analyse_tmp_intensity = [z['intensity array'] for z in data_for_analyse_tmp]
 
-        n_procs = args['nprocs']
+        # n_procs = args['nprocs']
+        # TODO why so slow?
+        n_procs = 1
 
 
 
