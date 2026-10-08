@@ -483,7 +483,7 @@ def process_mzml(args):
         logger.info("Combining every %s MS1 scans.", combine_every)
     buffer = []  # temporary storage for z's to be merged
 
-    for z in MS1OnlyMzML(source=input_mzml_path):
+    for z in MS1OnlyMzML(source=input_mzml_path, cv=None):
         rt = z['scanList']['scan'][0]['scan start time']
         #apply RT filtering
         if rt < min_rt:
