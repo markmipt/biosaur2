@@ -11,6 +11,9 @@ version = open('VERSION', encoding="utf8").readline().strip()
 
 def make_extensions():
     is_ci = bool(os.getenv("CI", ""))
+    # biosaur2.cfast reproduces numpy/cutils floating point results bit-for-bit;
+    # fused multiply-add contraction would change the last bit of some sums.
+    fast_compile_args = [] if os.name == 'nt' else ['-ffp-contract=off']
     include_diagnostics = False
     try:
         import numpy
@@ -31,12 +34,18 @@ def make_extensions():
 
         extensions = cythonize([
             Extension(name='biosaur2.cutils', sources=['biosaur2/cutils.pyx'],
-                      include_dirs=[numpy.get_include(), ])
+                      include_dirs=[numpy.get_include(), ]),
+            Extension(name='biosaur2.cfast', sources=['biosaur2/cfast.pyx'],
+                      include_dirs=[numpy.get_include(), ],
+                      extra_compile_args=fast_compile_args),
         ], compiler_directives=cython_directives)
     except ImportError:
         extensions = [
             Extension(name='biosaur2.cutils', sources=['biosaur2/cutils.c'],
-                      include_dirs=[numpy.get_include(), ])
+                      include_dirs=[numpy.get_include(), ]),
+            Extension(name='biosaur2.cfast', sources=['biosaur2/cfast.c'],
+                      include_dirs=[numpy.get_include(), ],
+                      extra_compile_args=fast_compile_args),
         ]
     return extensions
 

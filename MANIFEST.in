@@ -1,3 +1,4 @@
 include requirements.txt
 include VERSION
 include biosaur2/cutils.pyx
+include biosaur2/cfast.pyx

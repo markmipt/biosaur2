@@ -7,7 +7,14 @@ from scipy.optimize import curve_fit
 import logging
 logger = logging.getLogger(__name__)
 from .cutils import get_fast_dict, get_and_calc_apex_intensity_and_scan, centroid_pasef_scan
+try:
+    from .cfast import centroid_pasef_scan_fast
+except ImportError:
+    centroid_pasef_scan_fast = None
 import ast
+import sys
+import ctypes
+import tempfile
 
 class MS1OnlyMzML(mzml.MzML): 
      _default_iter_path = '//spectrum[./*[local-name()="cvParam" and @name="ms level" and @value="1"]]' 
@@ -224,6 +231,22 @@ def write_output(peptide_features, args, write_header=True, hills=False):
     out_file.close()
 
 
+def centroid_pasef_frame(z, mz_step, hill_mz_accuracy, ion_mobility_accuracy, pasefmini, pasefminlh):
+    # exact typed kernel; returns None when its preconditions do not hold
+    res = None
+    if centroid_pasef_scan_fast is not None:
+        res = centroid_pasef_scan_fast(z, mz_step, hill_mz_accuracy, ion_mobility_accuracy, pasefmini, pasefminlh)
+    if res is None:
+        mz_ar_new, intensity_ar_new, ion_mobility_ar_new = centroid_pasef_scan(z, mz_step, hill_mz_accuracy, ion_mobility_accuracy, pasefmini, pasefminlh)
+        mz_ar_new, intensity_ar_new, ion_mobility_ar_new = np.array(mz_ar_new), np.array(intensity_ar_new), np.array(ion_mobility_ar_new)
+    else:
+        mz_ar_new, intensity_ar_new, ion_mobility_ar_new = res
+
+    z['m/z array'] = mz_ar_new
+    z['intensity array'] = intensity_ar_new
+    z['mean inverse reduced ion mobility array'] = ion_mobility_ar_new
+
+
 def centroid_pasef_data(data_for_analyse_tmp, args, mz_step):
 
     cnt_ms1_scans = len(data_for_analyse_tmp)
@@ -313,11 +336,7 @@ def centroid_pasef_data(data_for_analyse_tmp, args, mz_step):
 
             #     peak_idx += 1
 
-            mz_ar_new, intensity_ar_new, ion_mobility_ar_new = centroid_pasef_scan(z, mz_step, hill_mz_accuracy, ion_mobility_accuracy, pasefmini, pasefminlh)
-
-            data_for_analyse_tmp[spec_idx]['m/z array'] = np.array(mz_ar_new)
-            data_for_analyse_tmp[spec_idx]['intensity array'] = np.array(intensity_ar_new)
-            data_for_analyse_tmp[spec_idx]['mean inverse reduced ion mobility array'] = np.array(ion_mobility_ar_new)
+            centroid_pasef_frame(data_for_analyse_tmp[spec_idx], mz_step, hill_mz_accuracy, ion_mobility_accuracy, pasefmini, pasefminlh)
 
         logger.debug('number of m/z peaks in scan after centroiding: %d', len(data_for_analyse_tmp[spec_idx]['m/z array']))
 
@@ -459,6 +478,186 @@ def process_tof(data_for_analyse_tmp, noise_factor):
     return data_for_analyse_tmp
 
 
+def filter_ms1_spectrum(z, min_intensity, min_mz, max_mz):
+
+    if 'raw ion mobility array' in z:
+        z['mean inverse reduced ion mobility array'] = z['raw ion mobility array']
+
+    if 'mean inverse reduced ion mobility array' not in z:
+        z['ignore_ion_mobility'] = True
+        z['mean inverse reduced ion mobility array'] = np.zeros(len(z['m/z array']))
+
+    # intensity filter
+    idx = z['intensity array'] >= min_intensity
+    z['intensity array'] = z['intensity array'][idx]
+    z['m/z array'] = z['m/z array'][idx]
+    z['mean inverse reduced ion mobility array'] = z['mean inverse reduced ion mobility array'][idx]
+
+    # min_mz filter
+    idx = z['m/z array'] >= min_mz
+    z['m/z array'] = z['m/z array'][idx]
+    z['intensity array'] = z['intensity array'][idx]
+    z['mean inverse reduced ion mobility array'] = z['mean inverse reduced ion mobility array'][idx]
+
+    # max_mz filter
+    idx = z['m/z array'] <= max_mz
+    z['m/z array'] = z['m/z array'][idx]
+    z['intensity array'] = z['intensity array'][idx]
+    z['mean inverse reduced ion mobility array'] = z['mean inverse reduced ion mobility array'][idx]
+
+    # sort by m/z
+    idx = np.argsort(z['m/z array'])
+    z['m/z array'] = z['m/z array'][idx]
+    z['intensity array'] = z['intensity array'][idx]
+    z['mean inverse reduced ion mobility array'] = z['mean inverse reduced ion mobility array'][idx]
+
+
+_ARRAY_KEYS = ('m/z array', 'intensity array', 'mean inverse reduced ion mobility array')
+
+
+class _FrameSpill(object):
+    """Raw spectrum arrays written to an anonymous temporary file, read back on demand."""
+
+    def __init__(self, directory):
+        self.f = tempfile.TemporaryFile(dir=directory)
+        self.index = []
+
+    def add(self, z):
+        entry = []
+        for k in _ARRAY_KEYS:
+            a = np.ascontiguousarray(z[k])
+            entry.append((self.f.tell(), a.dtype, a.shape[0]))
+            self.f.write(a.tobytes())
+        self.index.append(entry)
+
+    def restore(self, i, z):
+        for k, (pos, dt, n) in zip(_ARRAY_KEYS, self.index[i]):
+            self.f.seek(pos)
+            z[k] = np.frombuffer(self.f.read(n * dt.itemsize), dtype=dt).copy()
+
+    def close(self):
+        self.f.close()
+
+
+def process_mzml_stream(args, spill_dir):
+    """process_mzml followed by centroid_pasef_data (default timsTOF path), without
+    keeping all raw spectra in memory.
+
+    Each spectrum is filtered exactly as in process_mzml, its raw arrays are appended
+    to a temporary spill file and it is centroided right away with the m/z step of
+    the running maximum m/z.  At the end the spectra whose float32 m/z step differs
+    from the final one (normally a handful at the start of the run) are restored and
+    centroided again, so the result equals centroid_pasef_data(process_mzml(args)).
+
+    Returns (data_for_analyse, mz_step), or None if no spill file can be created
+    (call process_mzml then).  mz_step is None when centroiding does not
+    apply (a spectrum without ion mobility, several FAIMS values, an error); the raw
+    spectra are then restored and the result equals process_mzml(args).
+    The caller guarantees combine_every == 1 and no -tof / -profile processing.
+    """
+    input_mzml_path = args['file']
+    min_intensity = args['mini']
+    min_mz = args['minmz']
+    max_mz = args['maxmz']
+    min_rt = args['rtmin']
+    max_rt = args['rtmax']
+    hill_mass_accuracy = args['htol']
+    ion_mobility_accuracy = args['paseftol']
+    pasefmini = args['pasefmini']
+    pasefminlh = args['pasefminlh']
+
+    logger.info(f'Processing mzML file: {input_mzml_path}')
+    logger.debug(f'min_intensity={min_intensity}, min_mz={min_mz}, max_mz={max_mz}, min_rt={min_rt}, max_rt={max_rt}')
+
+    skipped = 0
+    data_for_analyse = []
+    steps_used = []
+    max_mz_value = 0
+    streaming = True
+    faims_first = None
+    try:
+        spill = _FrameSpill(spill_dir)
+    except OSError:
+        return None
+    try:
+        for z in MS1OnlyMzML(source=input_mzml_path, cv=None):
+            rt = z['scanList']['scan'][0]['scan start time']
+            #apply RT filtering
+            if rt < min_rt:
+                continue
+
+            if max_rt > 0 and rt > max_rt:
+                break
+
+            if z['ms level'] == 1:
+
+                filter_ms1_spectrum(z, min_intensity, min_mz, max_mz)
+
+                if not len(z['m/z array']):
+                    skipped += 1
+                    continue
+
+                spill.add(z)
+                max_mz_value = max(max_mz_value, z['m/z array'].max())
+
+                if streaming:
+                    faims_val = z.get('FAIMS compensation voltage', 0)
+                    if faims_first is None:
+                        faims_first = faims_val
+                    if 'ignore_ion_mobility' in z or faims_val != faims_first:
+                        streaming = False
+                if streaming:
+                    mz_step = hill_mass_accuracy * 1e-6 * max_mz_value
+                    try:
+                        centroid_pasef_frame(z, mz_step, hill_mass_accuracy, ion_mobility_accuracy, pasefmini, pasefminlh)
+                        steps_used.append(np.float32(mz_step))
+                    except Exception:
+                        # let the original code path run (and fail) at its usual place
+                        streaming = False
+                        spill.restore(len(data_for_analyse), z)
+
+                data_for_analyse.append(z)
+                if len(data_for_analyse) % 64 == 0:
+                    malloc_trim()
+
+        logger.info('Number of MS1 scans: %d', len(data_for_analyse))
+        logger.info('Number of skipped MS1 scans: %d', skipped)
+
+        if len(data_for_analyse) == 0:
+            raise Exception('no MS1 scans in input file')
+
+        if not streaming:
+            logger.debug('Streaming centroiding not applicable, restoring raw spectra')
+            for i in range(len(steps_used)):
+                spill.restore(i, data_for_analyse[i])
+            return data_for_analyse, None
+
+        # same expression as in main.process_file
+        mz_step = hill_mass_accuracy * 1e-6 * max_mz_value
+        step32 = np.float32(mz_step)
+        n_redo = 0
+        for i, z in enumerate(data_for_analyse):
+            if steps_used[i] != step32:
+                spill.restore(i, z)
+                centroid_pasef_frame(z, mz_step, hill_mass_accuracy, ion_mobility_accuracy, pasefmini, pasefminlh)
+                n_redo += 1
+        logger.debug('Spectra centroided again with the final m/z step: %d', n_redo)
+        logger.info('Number of MS1 scans after combining ion mobility peaks: %d', len(data_for_analyse))
+        return data_for_analyse, mz_step
+    finally:
+        spill.close()
+
+
+def malloc_trim():
+    """Return freed heap memory to the OS (glibc only; no-op elsewhere)."""
+    if not sys.platform.startswith('linux'):
+        return
+    try:
+        ctypes.CDLL('libc.so.6').malloc_trim(0)
+    except (OSError, AttributeError):
+        pass
+
+
 def process_mzml(args):
 
     input_mzml_path = args['file']
@@ -494,36 +693,7 @@ def process_mzml(args):
 
         if z['ms level'] == 1:
 
-            if 'raw ion mobility array' in z:
-                z['mean inverse reduced ion mobility array'] = z['raw ion mobility array']
-
-            if 'mean inverse reduced ion mobility array' not in z:
-                z['ignore_ion_mobility'] = True
-                z['mean inverse reduced ion mobility array'] = np.zeros(len(z['m/z array']))
-
-            # intensity filter
-            idx = z['intensity array'] >= min_intensity
-            z['intensity array'] = z['intensity array'][idx]
-            z['m/z array'] = z['m/z array'][idx]
-            z['mean inverse reduced ion mobility array'] = z['mean inverse reduced ion mobility array'][idx]
-
-            # min_mz filter
-            idx = z['m/z array'] >= min_mz
-            z['m/z array'] = z['m/z array'][idx]
-            z['intensity array'] = z['intensity array'][idx]
-            z['mean inverse reduced ion mobility array'] = z['mean inverse reduced ion mobility array'][idx]
-
-            # max_mz filter
-            idx = z['m/z array'] <= max_mz
-            z['m/z array'] = z['m/z array'][idx]
-            z['intensity array'] = z['intensity array'][idx]
-            z['mean inverse reduced ion mobility array'] = z['mean inverse reduced ion mobility array'][idx]
-
-            # sort by m/z
-            idx = np.argsort(z['m/z array'])
-            z['m/z array'] = z['m/z array'][idx]
-            z['intensity array'] = z['intensity array'][idx]
-            z['mean inverse reduced ion mobility array'] = z['mean inverse reduced ion mobility array'][idx]
+            filter_ms1_spectrum(z, min_intensity, min_mz, max_mz)
 
             cnt += 1
 
