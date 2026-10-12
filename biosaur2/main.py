@@ -7,11 +7,13 @@ from copy import deepcopy
 import logging
 logger = logging.getLogger(__name__)
 from .cutils import get_initial_isotopes, checking_cos_correlation_for_carbon, split_peaks, split_peaks_old, detect_hills, process_hills
+from . import fastpath
 from multiprocessing import Queue, Process, cpu_count
 from collections import Counter, defaultdict
 import os
+import gc
 
-def process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict, data_start_id, write_header, args):
+def process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict, data_start_id, write_header, args, isotope_index=None):
     isotopes_mass_accuracy = args['itol']
 
     min_charge = args['cmin']
@@ -46,7 +48,11 @@ def process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict
         logger.warning('md_correction parameter MUST BE Orbi,Tof or ICR. Using Orbi now')
         md_correction_int = 1
 
-    if n_procs == 1:
+    if n_procs == 1 and isotope_index is not None:
+        logger.debug('Running get_initial_isotopes (indexed) in single process mode')
+        ready = fastpath.cfast.get_initial_isotopes_fast(hills_dict, isotopes_mass_accuracy, isotopes_list, a, min_charge, max_charge, mz_step, paseftol, faims_val, ivf, fastpath.sorted_hill_order(hills_dict), md_correction_int, isotope_index)
+
+    elif n_procs == 1:
         logger.debug('Running get_initial_isotopes in single process mode')
         qout = []
         ready = []
@@ -150,6 +156,10 @@ def process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict
 
     max_l = len(ready)
     cur_l = 0
+    if fastpath.FAST_OK:
+        # same result as the loop below, without the O(n) deletions
+        ready = fastpath.filter_by_mass_error(ready, isotopes_mass_error_map)
+        max_l = 0
 
     while cur_l < max_l:
         pep_feature = ready[cur_l]
@@ -199,8 +209,13 @@ def process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict
 
     ready_final = []
     ready_set = set()
-    ready = sorted(ready, key=func_for_sort)
-    cur_isotopes = ready[0]['nIsotopes']
+    if fastpath.FAST_OK:
+        # same result as the loop below (which always works on ready[0]), in O(n log n)
+        ready_final, ready_set = fastpath.select_features(ready)
+        max_l = 0
+    else:
+        ready = sorted(ready, key=func_for_sort)
+        cur_isotopes = ready[0]['nIsotopes']
 
     while cur_l < max_l:
         pep_feature = ready[cur_l]
@@ -420,7 +435,19 @@ def process_file(args):
 
         write_header = True
 
-        data_for_analyse = utils.process_mzml(args)
+        stream_mz_step = None
+        res = None
+        if fastpath.FAST_OK and args['combine_every'] == 1 and not args['tof'] and not args['profile']:
+            # centroid while reading so that the raw spectra never accumulate (identical result)
+            out_path = args['o'] if args['o'] else input_file_path
+            res = utils.process_mzml_stream(args, os.path.dirname(os.path.abspath(out_path)))
+        if res is not None:
+            data_for_analyse, stream_mz_step = res
+        else:
+            data_for_analyse = utils.process_mzml(args)
+        if fastpath.FAST_OK:
+            # the parsed spectra contain no reference cycles; keep the collector off them
+            gc.freeze()
 
         #Process faims
 
@@ -445,11 +472,15 @@ def process_file(args):
                     data_cur_id += 1
 
             hill_mass_accuracy = args['htol']
-            max_mz_value = 0
-            for z in data_for_analyse_tmp:
-                max_mz_value = max(max_mz_value, z['m/z array'].max())
+            if stream_mz_step is not None:
+                # spectra are already centroided; this is the step computed from the raw spectra
+                mz_step = stream_mz_step
+            else:
+                max_mz_value = 0
+                for z in data_for_analyse_tmp:
+                    max_mz_value = max(max_mz_value, z['m/z array'].max())
 
-            mz_step = hill_mass_accuracy * 1e-6 * max_mz_value
+                mz_step = hill_mass_accuracy * 1e-6 * max_mz_value
 
             #Process TOF
             if args['tof']:
@@ -462,7 +493,8 @@ def process_file(args):
             #Process ion mobility
 
             if all('ignore_ion_mobility' not in z for z in data_for_analyse_tmp):
-                utils.centroid_pasef_data(data_for_analyse_tmp, args, mz_step)
+                if stream_mz_step is None:
+                    utils.centroid_pasef_data(data_for_analyse_tmp, args, mz_step)
             else:
                 args['paseftol'] = 0
 
@@ -504,28 +536,75 @@ def process_file(args):
 
                 logger.info('Automatically optimized htol parameter: %.3f ppm', args['htol'])
 
-            logger.info('Starting hills detection')
-            hills_dict, total_mass_diff = detect_hills(data_for_analyse_tmp, args, mz_step, paseftol, md_correction_int=md_correction_int)
+            # Fast paths (biosaur2.fastpath / cfast) give results identical to the
+            # original functions and fall back to them when their preconditions fail.
+            use_fast = fastpath.FAST_OK and not args['use_hill_calib']
+            if use_fast:
+                fastpath.malloc_trim()   # raw spectra freed by centroiding
+            n_spectra = len(data_for_analyse_tmp)
 
-            logger.info('Detected number of hills before splitting: %d', len(set(hills_dict['hills_idx_array'])))
+            with fastpath.gc_paused():
 
-            hills_dict = split_peaks_multi(hills_dict, data_for_analyse_tmp, args['hvf'], args)
-            logger.info('Detected number of hills after splitting: %d', len(set(hills_dict['hills_idx_array'])))
+                logger.info('Starting hills detection')
+                hills_dict = None
+                if use_fast:
+                    res = fastpath.cfast.detect_hills_fast(data_for_analyse_tmp, args['htol'], mz_step, paseftol, md_correction_int)
+                    if res is not None:
+                        hills_dict = res[0]
+                    else:
+                        logger.debug('detect_hills: using the original implementation')
+                if hills_dict is None:
+                    hills_dict, _ = detect_hills(data_for_analyse_tmp, args, mz_step, paseftol, md_correction_int=md_correction_int)
+                    # never read downstream (utils.filter_hills is unused)
+                    for k in ('mzs_array', 'intensity_array', 'im_array'):
+                        hills_dict.pop(k, None)
 
-            logger.info('Starting hills processing')
-            hills_dict = process_hills(hills_dict, data_for_analyse_tmp, mz_step, paseftol, args)
+                logger.info('Detected number of hills before splitting: %d', len(np.unique(np.asarray(hills_dict['hills_idx_array']))))
 
-            logger.info('Detected number of hills: %d', len(set(hills_dict['hills_idx_array'])))
-            if args['write_hills']:
-                hills_dict, hills_features = utils.process_hills_extra(hills_dict, RT_dict, faims_val, data_start_id, mz_step, paseftol)
-                utils.write_output(hills_features, args, write_header, hills=True)
+                csr = fastpath.split_process_fast(hills_dict, data_for_analyse_tmp, mz_step, paseftol, args) if use_fast else None
+                isotope_index = None
+                if csr is not None:
+                    del hills_dict
+                    logger.info('Detected number of hills after splitting: %d', len(csr['seg_off']) - 1)
+                    logger.info('Starting hills processing')
+                    if args['nprocs'] == 1 and fastpath.set_order_ok():
+                        isotope_index = fastpath.cfast.build_isotope_index(csr)
+                    hills_dict = fastpath.hills_dict_from_csr(csr, full=isotope_index is None, write_hills=args['write_hills'])
+                    del csr
+                else:
+                    if use_fast:
+                        logger.debug('split_peaks/process_hills: using the original implementation')
+                    hills_dict = split_peaks_multi(hills_dict, data_for_analyse_tmp, args['hvf'], args)
+                    logger.info('Detected number of hills after splitting: %d', len(set(hills_dict['hills_idx_array'])))
 
-            logger.info('Starting features detection')
-            ready_set = process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict, data_start_id, write_header, args)
+                    logger.info('Starting hills processing')
+                    hills_dict = process_hills(hills_dict, data_for_analyse_tmp, mz_step, paseftol, args)
+                    if not args['write_hills']:
+                        hills_dict.pop('tmp_mz_array', None)   # only read by process_hills_extra
+
+                logger.info('Detected number of hills: %d', len(hills_dict['hills_idx_array_unique']) if 'hills_idx_array_unique' in hills_dict else len(set(hills_dict['hills_idx_array'])))
+
+                # the spectra are not needed any more
+                data_for_analyse_tmp = None
+                if len(faims_set) == 1:
+                    data_for_analyse = None
+                if use_fast:
+                    fastpath.malloc_trim()
+
+                if args['write_hills']:
+                    hills_dict, hills_features = utils.process_hills_extra(hills_dict, RT_dict, faims_val, data_start_id, mz_step, paseftol)
+                    utils.write_output(hills_features, args, write_header, hills=True)
+                    del hills_features
+
+                logger.info('Starting features detection')
+                ready_set = process_features_iteration(hills_dict, faims_val, mz_step, paseftol, RT_dict, data_start_id, write_header, args, isotope_index=isotope_index)
 
             write_header = False
 
-            data_start_id += len(data_for_analyse_tmp)
+            data_start_id += n_spectra
+
+        if fastpath.FAST_OK:
+            gc.unfreeze()
 
     elif input_file_path.lower().endswith('.hills.tsv'):
         hills_features = pd.read_table(input_file_path)
